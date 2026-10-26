@@ -4,7 +4,9 @@ LDFLAGS  := -s -w -X $(MODULE)/internal/version.stampedVersion=$(VERSION)
 BINARIES := ship8t ship8td
 TARGETS  := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64
 
-.PHONY: build test vet fmt-check vuln dist clean
+STATICCHECK_VERSION := v0.8.2
+
+.PHONY: build test vet fmt-check staticcheck vuln dist clean
 
 # Build both binaries for the current platform into bin/.
 build:
@@ -22,6 +24,10 @@ vet:
 fmt-check:
 	@out="$$(gofmt -l .)"; \
 	if [ -n "$$out" ]; then echo "gofmt needed for:"; echo "$$out"; exit 1; fi
+
+# Needs network access to fetch the pinned tool on first use.
+staticcheck:
+	go run honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) ./...
 
 # Needs network access to fetch the vulnerability database. Not part of "go test".
 vuln:
