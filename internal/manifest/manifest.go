@@ -33,8 +33,8 @@ type Serve struct {
 	SPAFallback bool `json:"spa_fallback"`
 }
 
-// Decode reads one manifest from reader and validates its version, its file
-// list, and every file path. The caller must cap the size of reader.
+// Decode reads one manifest from reader and validates it against the manifest
+// rules of ADR 0004. The caller must cap the size of reader.
 func Decode(reader io.Reader) (*Manifest, error) {
 	decoder := json.NewDecoder(reader)
 	// Reject unknown fields so a typo cannot silently change behavior.
@@ -53,7 +53,8 @@ func Decode(reader io.Reader) (*Manifest, error) {
 	return &manifest, nil
 }
 
-// validate checks the version, the file count, and every file.
+// validate checks the version, the file count, every file, and how the file
+// paths relate to each other.
 func (manifest *Manifest) validate() error {
 	if manifest.ManifestVersion != supportedVersion {
 		return fmt.Errorf("%w: got %d, want %d", ErrUnsupportedVersion, manifest.ManifestVersion, supportedVersion)
@@ -65,6 +66,9 @@ func (manifest *Manifest) validate() error {
 		if err := file.validate(); err != nil {
 			return fmt.Errorf("invalid manifest: files[%d]: %w", index, err)
 		}
+	}
+	if err := checkPathCollisions(manifest.Files); err != nil {
+		return fmt.Errorf("invalid manifest: %w", err)
 	}
 	return nil
 }
