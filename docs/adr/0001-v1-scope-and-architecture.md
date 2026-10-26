@@ -246,3 +246,4 @@ docs/adr/          architecture decisions
 - 2026-10-26. Accepted, together with ADRs 0002, 0003, and 0004.
 - 2026-10-26. Revised before any implementation. Renumbered the ADR set so the scope ADR comes first, added `ship8t login` and `ship8t logout`, refined secret detection to use names and content, changed the default ports to 8480 and 8481, required `--data-dir` outside `--dev`, and recorded the transitive dependency, install, and build details.
 - 2026-10-26. Dropped the `NOTICE` file and moved the copyright line into the `LICENSE` appendix.
+- 2026-10-26. Clarified section 11 without changing the decision. CI also runs `staticcheck` as a mandatory check and CodeQL with the `security-extended` suite as an advisory check. Neither adds a module dependency.
