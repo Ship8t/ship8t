@@ -1,0 +1,37 @@
+name: assign
+
+# Assigns new issues and pull requests to the maintainer.
+# pull_request_target gives fork pull requests a token that can write.
+# That is safe here because the workflow never checks out or runs pull request code.
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+
+permissions: {}
+
+jobs:
+  issue:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - run: gh issue edit "$NUMBER" --add-assignee ryanjayleyva
+
+  pull-request:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - run: gh pr edit "$NUMBER" --add-assignee ryanjayleyva
