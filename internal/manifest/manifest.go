@@ -53,7 +53,7 @@ func Decode(reader io.Reader) (*Manifest, error) {
 	return &manifest, nil
 }
 
-// validate checks the version, the file count, and every file path.
+// validate checks the version, the file count, and every file.
 func (manifest *Manifest) validate() error {
 	if manifest.ManifestVersion != supportedVersion {
 		return fmt.Errorf("%w: got %d, want %d", ErrUnsupportedVersion, manifest.ManifestVersion, supportedVersion)
@@ -62,7 +62,7 @@ func (manifest *Manifest) validate() error {
 		return errors.New("invalid manifest: files must list at least one file")
 	}
 	for index, file := range manifest.Files {
-		if err := ValidatePath(file.Path); err != nil {
+		if err := file.validate(); err != nil {
 			return fmt.Errorf("invalid manifest: files[%d]: %w", index, err)
 		}
 	}
