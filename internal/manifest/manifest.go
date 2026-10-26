@@ -34,17 +34,29 @@ type Serve struct {
 }
 
 // Decode reads one manifest from reader and validates it against the manifest
-// rules of ADR 0004. The caller must cap the size of reader.
+// rules of ADR 0004. It reads at most MaxBodyBytes and fails with
+// ErrLimitExceeded when the body is longer.
 func Decode(reader io.Reader) (*Manifest, error) {
-	decoder := json.NewDecoder(reader)
+	// Allow one byte more than the limit, so an over-long body is detectable.
+	limited := &io.LimitedReader{R: reader, N: MaxBodyBytes + 1}
+	decoder := json.NewDecoder(limited)
 	// Reject unknown fields so a typo cannot silently change behavior.
 	decoder.DisallowUnknownFields()
 
 	var manifest Manifest
-	if err := decoder.Decode(&manifest); err != nil {
-		return nil, fmt.Errorf("decode manifest: %w", err)
+	decodeErr := decoder.Decode(&manifest)
+	var trailingErr error
+	if decodeErr == nil {
+		trailingErr = decoder.Decode(&struct{}{})
 	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+	// Check the size first, because a cut-off body also fails to parse.
+	if limited.N <= 0 {
+		return nil, fmt.Errorf("%w: manifest body is larger than %d bytes", ErrLimitExceeded, MaxBodyBytes)
+	}
+	if decodeErr != nil {
+		return nil, fmt.Errorf("decode manifest: %w", decodeErr)
+	}
+	if !errors.Is(trailingErr, io.EOF) {
 		return nil, errors.New("decode manifest: unexpected data after the manifest")
 	}
 	if err := manifest.validate(); err != nil {

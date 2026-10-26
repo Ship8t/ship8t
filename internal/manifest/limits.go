@@ -9,6 +9,9 @@ import (
 // server can answer with limit_exceeded.
 var ErrLimitExceeded = errors.New("limit exceeded")
 
+// MaxBodyBytes is the largest manifest body that Decode reads, from ADR 0004.
+const MaxBodyBytes = 8 << 20
+
 // Limits holds the size limits of one deployment. The server makes them
 // configurable and reports them through GET /v1/info.
 type Limits struct {
