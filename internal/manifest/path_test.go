@@ -27,6 +27,13 @@ func TestValidatePathRejectsUnsafePaths(t *testing.T) {
 		{"delete character", "index\x7f.html"},
 		{"c1 control character", "index\u0085.html"},
 		{"invalid utf-8", "index\xff.html"},
+		{"decomposed accent", "cafe\u0301.html"},
+		{"decomposed umlaut", "a\u0308.html"},
+		{"decomposed name in a directory", "cafe\u0301/index.html"},
+		{"angstrom sign", "\u212b.html"},
+		{"hangul jamo sequence", "\u1100\u1161.txt"},
+		{"decomposed name after an NFC segment", "dir/cafe\u0301.html"},
+		{"angstrom sign in a deep segment", "a/b/\u212b.txt"},
 		{"reserved name", "CON"},
 		{"reserved name in lowercase", "aux"},
 		{"reserved name with extension", "nul.txt"},
@@ -62,6 +69,13 @@ func TestValidatePathAcceptsSafePaths(t *testing.T) {
 		{"dots inside a name", "app.min.js"},
 		{"spaces inside a name", "my page.html"},
 		{"non-ascii name", "café/menü.html"},
+		{"precomposed accent", "caf\u00e9.html"},
+		{"precomposed hangul syllable", "\uac00.txt"},
+		{"combining mark without a precomposed form", "x\u0301.html"},
+		// These are NFC but not NFKC, so they prove the rule is NFC and not NFKC.
+		{"fi ligature", "\ufb01le.html"},
+		{"circled digit", "\u2460.txt"},
+		{"fullwidth letter", "\uff21.html"},
 		{"name that only starts with a reserved name", "console.log"},
 		{"reserved name with a letter suffix", "com10"},
 		{"device name with the number zero", "com0"},
@@ -92,6 +106,27 @@ func TestValidatePathQuotesTheOffendingPath(t *testing.T) {
 
 func TestValidatePathDoesNotEchoAnOversizedPath(t *testing.T) {
 	err := ValidatePath(strings.Repeat("a", 1<<20))
+	if err == nil {
+		t.Fatal("ValidatePath returned nil, want an error")
+	}
+	if len(err.Error()) > 200 {
+		t.Fatalf("error is %d bytes long, want it to stay short", len(err.Error()))
+	}
+}
+
+func TestValidatePathNamesTheNormalizationForm(t *testing.T) {
+	err := ValidatePath("cafe\u0301.html")
+	if err == nil {
+		t.Fatal("ValidatePath returned nil, want an error")
+	}
+	if !strings.Contains(err.Error(), "NFC") {
+		t.Fatalf("error %q does not name the NFC form", err)
+	}
+}
+
+func TestValidatePathDoesNotEchoAnOversizedNonNFCPath(t *testing.T) {
+	// The path fails the NFC check too, so only the check order keeps the error short.
+	err := ValidatePath("e\u0301" + strings.Repeat("a", 1<<20))
 	if err == nil {
 		t.Fatal("ValidatePath returned nil, want an error")
 	}

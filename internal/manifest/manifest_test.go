@@ -113,3 +113,28 @@ func TestDecodeDefaultsServeOptionsToOff(t *testing.T) {
 		t.Error("Serve.SPAFallback = true, want false")
 	}
 }
+
+func TestDecodeRequiresNFCPaths(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		wantErr bool
+	}{
+		{"precomposed path", `caf\u00e9.html`, false},
+		{"decomposed path", `cafe\u0301.html`, true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			body := `{"manifest_version":1,"files":[{"path":"` + test.path + `","size":1,"sha256":"` + validChecksum + `"}]}`
+
+			_, err := Decode(strings.NewReader(body), DefaultLimits())
+			if gotErr := err != nil; gotErr != test.wantErr {
+				t.Fatalf("Decode error = %v, want an error: %v", err, test.wantErr)
+			}
+			if test.wantErr && !strings.Contains(err.Error(), "NFC") {
+				t.Fatalf("error %q does not name the NFC form", err)
+			}
+		})
+	}
+}

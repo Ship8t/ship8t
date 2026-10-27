@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
@@ -18,7 +20,7 @@ const (
 var reservedDeviceNames = map[string]bool{"CON": true, "PRN": true, "AUX": true, "NUL": true}
 
 // ValidatePath reports why a manifest path is unsafe, or nil when it follows
-// the path rules of ADR 0004. It does not check Unicode normalization.
+// the path rules of ADR 0004.
 func ValidatePath(path string) error {
 	if path == "" {
 		return errors.New("invalid path: path is empty")
@@ -29,6 +31,10 @@ func ValidatePath(path string) error {
 	}
 	if !utf8.ValidString(path) {
 		return fmt.Errorf("invalid path %q: not valid utf-8", path)
+	}
+	// Require NFC so one name has one spelling on every filesystem.
+	if !norm.NFC.IsNormalString(path) {
+		return fmt.Errorf("invalid path %q: not in Unicode NFC form, normalize the file name to NFC", path)
 	}
 	if strings.ContainsRune(path, '\\') {
 		return fmt.Errorf("invalid path %q: use / as the separator, not a backslash", path)
