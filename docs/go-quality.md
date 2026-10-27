@@ -42,7 +42,7 @@ Optimize only with a benchmark, a profile, or a documented requirement. Never ad
 
 ## Automated checks
 
-Run these from the repository root. Go 1.24 is the module version. `staticcheck` may download a newer toolchain on first use.
+Run these from the repository root. Go 1.26 is the module version. `staticcheck` may download a newer toolchain on first use.
 
 | Command | Checks | Status | Limits |
 |---|---|---|---|

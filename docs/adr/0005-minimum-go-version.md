@@ -42,9 +42,13 @@ The standard library matters too. Go 1.25.14 is the last Go 1.25 release. When t
 - Keep every other rule of ADR 0001, section 9, including the limit of two direct dependencies.
 - Supersede only the bullet "Require Go 1.24 or newer" in ADR 0001, section 9. `os.Root` has been available since Go 1.24, so ADR 0003 stays true.
 
+### CI toolchain
+
+- `setup-go` reads only the `go` line of `go.mod` and ignores a `toolchain` line. With `go 1.26.0` it installs exactly Go 1.26.0. Without `check-latest`, a version such as `1.26` resolves to the newest 1.26 release already cached on the runner. Set `go-version` to `'1.26'` and `check-latest` to `true` for both jobs in `.github/workflows/ci.yml`, so that `setup-go` installs the newest 1.26 patch release, and keep `go 1.26.0` in `go.mod` as the minimum. Keep the value in `ci.yml` in step with the `go` line.
+- A trial run of `make fmt-check vet staticcheck test vuln` passed on exactly Go 1.26.0 and on Go 1.26.10, so this choice is hardening and not a fix. On Go 1.26.0 the scan lists standard library advisories that the code does not call, and on Go 1.26.10 the scan is clean.
 ### Open item
 
-- **CI toolchain, proposed.** `setup-go` reads only the `go` line of `go.mod` and ignores a `toolchain` line. With `go 1.26.0` it installs exactly Go 1.26.0, an early patch release that lacks later standard library fixes. Without `check-latest`, a version such as `1.26` resolves to the newest 1.26 release already cached on the runner. Propose to set `go-version` to `'1.26'` and `check-latest` to `true` for both jobs in `.github/workflows/ci.yml`, so that `setup-go` installs the newest 1.26 patch release, and to keep `go 1.26.0` in `go.mod` as the minimum. Verify this during implementation, and record the result here.
+- **CodeQL toolchain.** CodeQL does not use `setup-go`. The pinned action bundles a CodeQL version that supports Go up to 1.27, and its autobuild is expected to rely on the `go` command of the runner to download the Go version named in `go.mod`. No run of that job has confirmed this. Confirm it on the first pull request run, and record the result here.
 
 ## Consequences and trade-offs
 
@@ -57,7 +61,8 @@ The standard library matters too. Go 1.25.14 is the last Go 1.25 release. When t
 ## Implementation implications
 
 - Update `go.mod` and `go.sum`, and confirm `make fmt-check vet staticcheck test vuln` all pass.
-- Resolve the open item about the CI toolchain, and record the result here.
+- Keep `go-version` in `.github/workflows/ci.yml` in step with the `go` line of `go.mod`.
+- Confirm that the CodeQL job passes on its first run.
 - State the new minimum in `README.md`, `CONTRIBUTING.md`, and `docs/go-quality.md`.
 - Once this ADR is accepted, add history lines to ADR 0001. One points here and names the superseded bullet. One records the new x/text pin, because the earlier line that names v0.28.0 stays as history. The implementation implications of ADR 0001 and ADR 0003 name Go 1.24 as the original minimum, and those statements stay as written.
 - Re-run the manifest tests, the case folding comparison with a real filesystem, and the mutation checks.
@@ -66,3 +71,4 @@ The standard library matters too. Go 1.25.14 is the last Go 1.25 release. When t
 
 - 2026-10-27. Proposed.
 - 2026-10-27. Accepted. The CI toolchain open item stays proposed until the implementation verifies it.
+- 2026-10-27. Resolved the CI toolchain item for the check and vuln jobs and recorded the result in the Decision section. The CodeQL toolchain stays an open item until a run confirms it. The matching implementation bullet now asks to keep `ci.yml` in step with `go.mod`.

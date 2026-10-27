@@ -10,7 +10,7 @@ Ship8t is at the start of v1 implementation. The [README](README.md) lists what 
 
 ## Set up
 
-Install Go 1.24 or newer. Clone the repository and run the checks below. No other tools or accounts are needed.
+Install Go 1.26 or newer. Clone the repository and run the checks below. No other tools or accounts are needed.
 
 ## Run the checks
 

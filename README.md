@@ -40,12 +40,13 @@ All packages live under `internal/`, so v1 offers no public Go API.
 - [ADR 0002](docs/adr/0002-deployment-states-and-activation.md) covers deployment states, allowed transitions, and activation.
 - [ADR 0003](docs/adr/0003-storage-and-atomic-publish.md) covers storage layout, atomic publishing, crash recovery, and retention.
 - [ADR 0004](docs/adr/0004-api-and-upload-protocol.md) covers the HTTP API, the manifest format, limits, the upload flow, and local site serving.
+- [ADR 0005](docs/adr/0005-minimum-go-version.md) covers the minimum Go version and the CI toolchain.
 - [docs/go-quality.md](docs/go-quality.md) lists the Go security and reliability rules and the automated checks.
 - [AGENTS.md](AGENTS.md) holds the rules for AI coding agents working in this repository, including the commit message rules.
 
 ## Development
 
-Go 1.24 or newer is required. These targets exist in the `Makefile`.
+Go 1.26 or newer is required. These targets exist in the `Makefile`.
 
 - `make build` builds both binaries into `bin/`.
 - `make fmt-check` fails when files need `gofmt`.
