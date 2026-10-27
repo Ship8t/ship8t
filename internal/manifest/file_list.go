@@ -7,6 +7,14 @@ import (
 	"fmt"
 )
 
+// fileBody is the JSON form of a File. Size is a pointer, so a missing or null
+// size is told apart from an explicit zero.
+type fileBody struct {
+	Path   string `json:"path"`
+	Size   *int64 `json:"size"`
+	SHA256 string `json:"sha256"`
+}
+
 // fileList decodes the files array of a manifest and stops once the array
 // holds more than maxFiles entries, so a small body cannot expand into a huge
 // slice before the file count limit runs.
@@ -40,11 +48,14 @@ func (list *fileList) UnmarshalJSON(data []byte) error {
 		if len(list.files) >= list.maxFiles {
 			return fmt.Errorf("%w: more than the limit of %d files per deployment", ErrLimitExceeded, list.maxFiles)
 		}
-		var file File
-		if err := decoder.Decode(&file); err != nil {
+		var entry fileBody
+		if err := decoder.Decode(&entry); err != nil {
 			return err
 		}
-		list.files = append(list.files, file)
+		if entry.Size == nil {
+			return fmt.Errorf("files[%d]: size is required, use 0 for an empty file", len(list.files))
+		}
+		list.files = append(list.files, File{Path: entry.Path, Size: *entry.Size, SHA256: entry.SHA256})
 	}
 	// Read the closing bracket.
 	_, err = decoder.Token()

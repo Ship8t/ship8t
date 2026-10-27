@@ -8,6 +8,10 @@ import (
 	"testing"
 )
 
+// sizeOnlyFile is the smallest file element that passes the size check. It is
+// not a valid file, because its path and checksum are empty.
+const sizeOnlyFile = `{"size":0}`
+
 // filesBody returns a manifest body whose files array holds the given JSON
 // elements.
 func filesBody(elements ...string) string {
@@ -27,12 +31,12 @@ func TestDecodeRejectsMoreFilesThanTheLimit(t *testing.T) {
 		body string
 	}{
 		{"one file over the limit", filesBody(distinctFile(1), distinctFile(2), distinctFile(3), distinctFile(4))},
-		// Empty objects are invalid files, so only a count check that runs first can reject them as too many.
-		{"empty objects over the limit", filesBody("{}", "{}", "{}", "{}")},
+		// Size-only objects have the required size but are invalid files, so only a count check that runs first can reject them as too many.
+		{"size-only objects over the limit", filesBody(sizeOnlyFile, sizeOnlyFile, sizeOnlyFile, sizeOnlyFile)},
 		// A malformed element past the limit must not be decoded, so the count error wins.
 		{"wrong type past the limit", filesBody(distinctFile(1), distinctFile(2), distinctFile(3), `{"path":5}`)},
 		{"unknown field past the limit", filesBody(distinctFile(1), distinctFile(2), distinctFile(3), `{"mode":420}`)},
-		{"many files over the limit", filesBody(strings.Split(strings.Repeat("{},", 99)+"{}", ",")...)},
+		{"many files over the limit", filesBody(strings.Split(strings.Repeat(sizeOnlyFile+",", 99)+sizeOnlyFile, ",")...)},
 	}
 
 	for _, test := range tests {
@@ -104,9 +108,9 @@ func TestDecodeKeepsOnlyTheLastFilesFieldWhenItIsRepeated(t *testing.T) {
 }
 
 func TestDecodeDoesNotAllocateAFileForEveryElementOfAHugeArray(t *testing.T) {
-	// About 2.8 million empty objects fit in the 8 MiB body cap. Decoding them
-	// all into File structs would allocate more than 100 MiB.
-	body := `{"manifest_version":1,"files":[` + strings.Repeat("{},", (MaxBodyBytes-60)/3) + `{}]}`
+	// About 760 thousand size-only objects fit in the 8 MiB body cap. Decoding
+	// them all into File structs would allocate far more than the limit below.
+	body := `{"manifest_version":1,"files":[` + strings.Repeat(sizeOnlyFile+",", (MaxBodyBytes-60)/(len(sizeOnlyFile)+1)) + sizeOnlyFile + `]}`
 
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -116,7 +120,7 @@ func TestDecodeDoesNotAllocateAFileForEveryElementOfAHugeArray(t *testing.T) {
 	if !errors.Is(err, ErrLimitExceeded) {
 		t.Fatalf("Decode error = %v, want ErrLimitExceeded", err)
 	}
-	const maxAllocatedBytes = 100 << 20
+	const maxAllocatedBytes = 64 << 20
 	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > maxAllocatedBytes {
 		t.Fatalf("Decode allocated %d bytes, want at most %d", allocated, maxAllocatedBytes)
 	}
