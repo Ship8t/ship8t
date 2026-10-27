@@ -236,3 +236,46 @@ func TestDecodeComparesFieldNamesAfterUnescaping(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeDoesNotEchoAnOversizedNumber(t *testing.T) {
+	// The text of a JSON type error can include the whole number, which is
+	// untrusted and as long as the body cap allows.
+	digits := strings.Repeat("9", 1<<20)
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"manifest version", `{"manifest_version":` + digits + `,"files":[` + validFile + `]}`},
+		{"file size out of range", filesBody(`{"path":"a.html","size":` + digits + `,"sha256":"` + validChecksum + `"}`)},
+		{"exponent number as a size", filesBody(`{"path":"a.html","size":1e` + digits + `,"sha256":"` + validChecksum + `"}`)},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Decode(strings.NewReader(test.body), DefaultLimits())
+			if err == nil {
+				t.Fatal("Decode returned nil, want an error")
+			}
+			// The capped errors are about 135 bytes, so this limit leaves little room above them.
+			if len(err.Error()) > 160 {
+				t.Fatalf("error is %d bytes long, want it to stay short", len(err.Error()))
+			}
+		})
+	}
+}
+
+func TestDecodeKeepsOrdinaryTypeErrorsReadable(t *testing.T) {
+	body := filesBody(`{"path":"a.html","size":"x","sha256":"` + validChecksum + `"}`)
+
+	_, err := Decode(strings.NewReader(body), DefaultLimits())
+	if err == nil {
+		t.Fatal("Decode returned nil, want an error")
+	}
+	// The tail of the message proves the cap does not cut ordinary errors.
+	for _, want := range []string{"files[0]", "size", "cannot unmarshal string", "into Go value of type int64"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+}
