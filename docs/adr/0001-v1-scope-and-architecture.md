@@ -251,3 +251,4 @@ docs/adr/          architecture decisions
 - 2026-10-27. Superseded in part by [ADR 0005](0005-minimum-go-version.md). The bullet "Require Go 1.24 or newer" in section 9 no longer holds, because ADR 0005 requires Go 1.26 or newer. No other decision of this ADR changed.
 - 2026-10-27. ADR 0005 pins `golang.org/x/text` to v0.43.0. The earlier entry that names v0.28.0 stays as history.
 - 2026-10-27. The entry about the x/text pin says that CI reads its Go version from `go.mod`. That no longer holds, because `.github/workflows/ci.yml` sets `go-version` to `1.26`. See ADR 0005.
+- 2026-10-27. Re-verified `golang.org/x/text` when the manifest code began to use it, as section 9 requires. The license is BSD-3-Clause. The module published a release each month from June to October 2026, most recently v0.43.0 on 2026-10-09.
