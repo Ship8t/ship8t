@@ -28,6 +28,8 @@ func TestDecodeRejectsInvalidManifests(t *testing.T) {
 		{"fractional size", `{"manifest_version":1,"files":[{"path":"a.html","size":1.5,"sha256":"` + validChecksum + `"}]}`},
 		{"path traversal", `{"manifest_version":1,"files":[{"path":"../a.html","size":1,"sha256":"` + validChecksum + `"}]}`},
 		{"trailing data", `{"manifest_version":1,"files":[` + validFile + `]} {}`},
+		{"trailing unfinished value", `{"manifest_version":1,"files":[` + validFile + `]} {"a":`},
+		{"trailing closing bracket", `{"manifest_version":1,"files":[` + validFile + `]}]`},
 	}
 
 	for _, test := range tests {
@@ -182,5 +184,33 @@ func TestDecodeAcceptsPathsWithValidSurrogatePairs(t *testing.T) {
 	}
 	if want := "a\U0001f600.html"; got.Files[0].Path != want {
 		t.Fatalf("Path = %q, want %q", got.Files[0].Path, want)
+	}
+}
+
+func TestDecodeErrorsStartWithTheStageThatFailed(t *testing.T) {
+	// Callers and logs rely on this: reading failures start with "decode manifest",
+	// and a manifest that is read but breaks a rule starts with "invalid manifest".
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"syntax error", `{"manifest_version":1,`, "decode manifest: "},
+		{"unknown field", `{"manifest_version":1,"extra":1,"files":[` + validFile + `]}`, "decode manifest: "},
+		{"missing size", filesBody(`{"path":"a.html","sha256":"` + validChecksum + `"}`), "decode manifest: files[0]: "},
+		{"wrong serve type", `{"manifest_version":1,"files":[` + validFile + `],"serve":[]}`, "decode manifest: serve: "},
+		{"unexpected trailing data", `{"manifest_version":1,"files":[` + validFile + `]} x`, "decode manifest: "},
+		{"bad path", filesBody(`{"path":"../a","size":1,"sha256":"` + validChecksum + `"}`), "invalid manifest: files[0]: "},
+		{"no files", `{"manifest_version":1,"files":[]}`, "invalid manifest: "},
+		{"colliding paths", filesBody(validFile, `{"path":"A.html","size":1,"sha256":"`+validChecksum+`"}`), "invalid manifest: "},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Decode(strings.NewReader(test.body), DefaultLimits())
+			if err == nil || !strings.HasPrefix(err.Error(), test.want) {
+				t.Fatalf("Decode error = %v, want it to start with %q", err, test.want)
+			}
+		})
 	}
 }

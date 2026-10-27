@@ -56,6 +56,10 @@ func TestDecodeRejectsInvalidChecksums(t *testing.T) {
 		{"checksum with a space", " " + validChecksum[1:]},
 		{"checksum with a nul character", "\x00" + validChecksum[1:]},
 		{"checksum with a non-ascii digit", "٣" + validChecksum[2:]},
+		// Characters just below and above the lower end of each range, which no other case covers.
+		{"character before zero", "/" + validChecksum[1:]},
+		{"character after nine", ":" + validChecksum[1:]},
+		{"character before a", "`" + validChecksum[1:]},
 	}
 
 	for _, test := range tests {
