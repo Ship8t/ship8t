@@ -11,6 +11,13 @@ Only the following exists in the code today.
 - `ship8t` and `ship8td` each accept `version`, which prints the build version, and `help`, which prints the usage text.
 - Any other command prints the usage text to standard error and exits with code 2.
 - The version comes from a build-time stamp, then from the Go module build info, then falls back to `dev`.
+- `internal/manifest` validates and decodes deployment manifests. A manifest lists every file of a deployment with its path, size, and SHA-256 checksum, as ADR 0004 defines.
+  - `Decode` reads at most 8 MiB and accepts only a manifest version it supports.
+  - It accepts only exact field names, rejects repeated names and trailing data, and requires a `size` for every file.
+  - It rejects unsafe paths. These include traversal, reserved Windows names, control characters, invalid UTF-8, and names that are not in Unicode NFC form.
+  - It rejects names that differ only by letter case or Unicode normalization, because they would clash on a case-insensitive filesystem.
+  - It enforces limits on the file count and the file sizes. The defaults are 10,000 files, 50 MiB per file, and 500 MiB in total.
+  - No command or server code uses it yet.
 
 Deploying, rollback, the server, storage, authentication, and configuration files are not implemented. The commands described in the ADRs do not exist yet.
 
@@ -19,6 +26,7 @@ Deploying, rollback, the server, storage, authentication, and configuration file
 - `cmd/ship8t` is the client entry point.
 - `cmd/ship8td` is the server entry point.
 - `internal/version` reports the build version for both binaries.
+- `internal/manifest` validates and decodes deployment manifests for the client and the server.
 - `docs/adr` holds the architecture decision records.
 - `Makefile` holds the build, test, and analysis targets.
 - `.github/workflows` holds the GitHub Actions workflows for CI and CodeQL.
@@ -55,6 +63,10 @@ Ship8t is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
 
 The items below come from the v1 scope in ADR 0001 and the protocol and storage ADRs. Nothing in them is implemented unless noted.
 
+Implemented.
+
+- [x] Manifest validation package shared by the client and the server. The package is `internal/manifest`. The scanner and the server do not use it yet, and symlink rejection stays with the scanner item below.
+
 Partially implemented.
 
 - [ ] `ship8t version` prints the client version only. ADR 0001 also requires the server and API versions when a server is configured.
@@ -64,7 +76,6 @@ Partially implemented.
 
 Not implemented.
 
-- [ ] Manifest validation package shared by the client and the server.
 - [ ] Directory scanner with ignore rules, symlink rejection, and secret detection.
 - [ ] Configuration files and precedence (`ship8t.json`, user config, `ship8td.json`, environment variables).
 - [ ] Storage, the deployment state machine, atomic activation, history, and crash recovery.
