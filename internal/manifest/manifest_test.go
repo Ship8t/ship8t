@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// validChecksum is a well-formed lowercase SHA-256 checksum that the tests reuse.
 const validChecksum = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 // validFile is one valid file entry that the cases below embed in a manifest.

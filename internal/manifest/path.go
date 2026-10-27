@@ -12,7 +12,9 @@ import (
 )
 
 const (
-	maxPathBytes    = 1024
+	// maxPathBytes is the longest manifest path in bytes, from ADR 0004.
+	maxPathBytes = 1024
+	// maxSegmentBytes is the longest segment of a manifest path in bytes, from ADR 0004.
 	maxSegmentBytes = 255
 )
 
