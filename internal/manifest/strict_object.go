@@ -60,7 +60,9 @@ func unmarshalField(fields map[string]json.RawMessage, name string, target any) 
 		return nil
 	}
 	if err := json.Unmarshal(raw, target); err != nil {
-		return fmt.Errorf("%s: %w", name, err)
+		// Cap the text, because a type error can hold the whole untrusted number.
+		// Nothing needs the wrapped error, so the chain is dropped.
+		return fmt.Errorf("%s: %.100s", name, err)
 	}
 	return nil
 }
