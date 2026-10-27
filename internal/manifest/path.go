@@ -32,6 +32,11 @@ func ValidatePath(path string) error {
 	if !utf8.ValidString(path) {
 		return fmt.Errorf("invalid path %q: not valid utf-8", path)
 	}
+	// The JSON decoder replaces invalid bytes and lone surrogates with U+FFFD, so
+	// a path that holds it may have been changed from what the client sent.
+	if strings.ContainsRune(path, utf8.RuneError) {
+		return fmt.Errorf("invalid path %q: contains U+FFFD, the replacement character that marks bytes that are not valid utf-8", path)
+	}
 	// Require NFC so one name has one spelling on every filesystem.
 	if !norm.NFC.IsNormalString(path) {
 		return fmt.Errorf("invalid path %q: not in Unicode NFC form, normalize the file name to NFC", path)

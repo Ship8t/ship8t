@@ -138,3 +138,49 @@ func TestDecodeRequiresNFCPaths(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeRejectsPathsThatAreNotValidUTF8(t *testing.T) {
+	// encoding/json replaces invalid bytes and lone surrogates with U+FFFD, so
+	// without a check the client's name would silently change into another name.
+	file := func(path string) string {
+		return filesBody(`{"path":"` + path + `","size":1,"sha256":"` + validChecksum + `"}`)
+	}
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"raw invalid byte", file("a\xff.html")},
+		{"raw truncated sequence", file("a\xe2\x82.html")},
+		{"lone high surrogate escape", file(`a\ud800.html`)},
+		{"lone low surrogate escape", file(`a\udc00.html`)},
+		{"lone surrogate in a later segment", file(`dir/a\ud800.html`)},
+		{"high surrogate before a plain letter", file(`a\ud83dx.html`)},
+		{"escaped replacement character", file(`a\ufffd.html`)},
+		{"raw replacement character", file("a\ufffd.html")},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Decode(strings.NewReader(test.body), DefaultLimits())
+			if err == nil {
+				t.Fatalf("Decode(%q) = nil error, want an error", test.body)
+			}
+			if !strings.Contains(err.Error(), "U+FFFD") {
+				t.Errorf("error %q does not name U+FFFD", err)
+			}
+		})
+	}
+}
+
+func TestDecodeAcceptsPathsWithValidSurrogatePairs(t *testing.T) {
+	body := filesBody(`{"path":"a\ud83d\ude00.html","size":1,"sha256":"` + validChecksum + `"}`)
+
+	got, err := Decode(strings.NewReader(body), DefaultLimits())
+	if err != nil {
+		t.Fatalf("Decode returned %v, want nil", err)
+	}
+	if want := "a\U0001f600.html"; got.Files[0].Path != want {
+		t.Fatalf("Path = %q, want %q", got.Files[0].Path, want)
+	}
+}

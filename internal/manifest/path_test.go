@@ -27,6 +27,12 @@ func TestValidatePathRejectsUnsafePaths(t *testing.T) {
 		{"delete character", "index\x7f.html"},
 		{"c1 control character", "index\u0085.html"},
 		{"invalid utf-8", "index\xff.html"},
+		// The JSON decoder turns invalid bytes and lone surrogates into U+FFFD, so it must be rejected here.
+		{"replacement character", "a\ufffd.html"},
+		{"only a replacement character", "\ufffd"},
+		{"replacement character in a directory", "dir\ufffd/a.html"},
+		{"replacement character in a later segment", "dir/a\ufffd.html"},
+		{"replacement character in a deep directory", "a/b\ufffd/c.html"},
 		{"decomposed accent", "cafe\u0301.html"},
 		{"decomposed umlaut", "a\u0308.html"},
 		{"decomposed name in a directory", "cafe\u0301/index.html"},
@@ -72,6 +78,8 @@ func TestValidatePathAcceptsSafePaths(t *testing.T) {
 		{"precomposed accent", "caf\u00e9.html"},
 		{"precomposed hangul syllable", "\uac00.txt"},
 		{"combining mark without a precomposed form", "x\u0301.html"},
+		{"object replacement character", "a\ufffc.html"},
+		{"emoji outside the basic plane", "a\U0001f600.html"},
 		// These are NFC but not NFKC, so they prove the rule is NFC and not NFKC.
 		{"fi ligature", "\ufb01le.html"},
 		{"circled digit", "\u2460.txt"},
@@ -132,5 +140,57 @@ func TestValidatePathDoesNotEchoAnOversizedNonNFCPath(t *testing.T) {
 	}
 	if len(err.Error()) > 200 {
 		t.Fatalf("error is %d bytes long, want it to stay short", len(err.Error()))
+	}
+}
+
+func TestValidatePathDoesNotEchoAnOversizedInvalidPath(t *testing.T) {
+	// These paths fail the UTF-8 checks too, so only the check order keeps the error short.
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"replacement character at the end", strings.Repeat("a", 1<<20) + "\ufffd"},
+		{"invalid byte at the end", strings.Repeat("a", 1<<20) + "\xff"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidatePath(test.path)
+			if err == nil {
+				t.Fatal("ValidatePath returned nil, want an error")
+			}
+			if len(err.Error()) > 200 {
+				t.Fatalf("error is %d bytes long, want it to stay short", len(err.Error()))
+			}
+		})
+	}
+}
+
+func TestValidatePathReportsTheFirstUTF8Problem(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		want    string
+		notWant string
+	}{
+		{"invalid byte", "index\xff.html", "not valid utf-8", "U+FFFD"},
+		{"replacement character", "a\ufffd.html", "U+FFFD", ""},
+		// The replacement character check runs before the NFC check.
+		{"replacement character before a decomposed letter", "cafe\u0301\ufffd.html", "U+FFFD", "NFC"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidatePath(test.path)
+			if err == nil {
+				t.Fatal("ValidatePath returned nil, want an error")
+			}
+			if !strings.Contains(err.Error(), test.want) {
+				t.Errorf("error %q does not contain %q", err, test.want)
+			}
+			if test.notWant != "" && strings.Contains(err.Error(), test.notWant) {
+				t.Errorf("error %q should not contain %q", err, test.notWant)
+			}
+		})
 	}
 }
