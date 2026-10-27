@@ -20,6 +20,7 @@ func TestDecodeRejectsFieldNamesWithTheWrongCase(t *testing.T) {
 		{"capitalized version", `{"Manifest_Version":1,"files":[` + validFile + `]}`},
 		{"capitalized serve", `{"manifest_version":1,"files":[` + validFile + `],"Serve":{}}`},
 		{"capitalized spa fallback", `{"manifest_version":1,"files":[` + validFile + `],"serve":{"Spa_Fallback":true}}`},
+		{"go field name in serve", `{"manifest_version":1,"files":[` + validFile + `],"serve":{"SPAFallback":true}}`},
 	}
 
 	for _, test := range tests {
@@ -277,5 +278,28 @@ func TestDecodeKeepsOrdinaryTypeErrorsReadable(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not contain %q", err, want)
 		}
+	}
+}
+
+func TestDecodeSaysWhatShapeItExpected(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"null files", `{"manifest_version":1,"files":null}`, "not null"},
+		{"number files", `{"manifest_version":1,"files":5}`, "must be a list of files"},
+		{"array serve", `{"manifest_version":1,"files":[` + validFile + `],"serve":[]}`, "want a JSON object"},
+		{"array file", filesBody(`[1]`), "want a JSON object"},
+		{"string manifest", `"manifest"`, "want a JSON object"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Decode(strings.NewReader(test.body), DefaultLimits())
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Decode error = %v, want it to contain %q", err, test.want)
+			}
+		})
 	}
 }

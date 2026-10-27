@@ -54,6 +54,11 @@ func TestCheckPathCollisionsRejectsCollidingPaths(t *testing.T) {
 		{"cherokee file inside a directory of its lowercase", []string{"\u13a0", "\uab70/f.html"}},
 		// Both are NFC, and only a normalization step makes their folded forms equal.
 		{"dotted capital i with a mark below and its decomposed form", []string{"a/i\u032f\u0307.html", "a/\u0130\u032f.html"}},
+		// smallestFoldVariant maps iota to the combining mark U+0345, which lands before
+		// U+0323 and must be reordered, so these two collide only if the key is normalized after folding.
+		{"iota with a mark below and the same marks in canonical order", []string{"a/\u03b9\u0323.html", "a/\u0323\u0345.html"}},
+		// The precomposed letter must be decomposed before folding, or its fold differs.
+		{"iota with tonos and its decomposed marks", []string{"a/\u03af.html", "a/\u0301\u0345.html"}},
 	}
 
 	for _, test := range tests {

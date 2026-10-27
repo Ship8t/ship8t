@@ -194,3 +194,34 @@ func TestValidatePathReportsTheFirstUTF8Problem(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatePathNamesTheRuleItBroke(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"empty path", "", "path is empty"},
+		{"current directory", ".", `segment "." is not allowed`},
+		{"parent directory", "a/../b", `segment ".." is not allowed`},
+		{"leading slash", "/a", "empty segment"},
+		{"doubled slash", "a//b", "empty segment"},
+		{"trailing slash", "a/", "empty segment"},
+		{"backslash", `a\b`, "backslash"},
+		{"control character", "a\x00b", "control character"},
+		{"reserved name", "dir/CON.txt", "windows reserved name"},
+		{"trailing dot", "a.", "ends in a dot or a space"},
+		{"trailing space", "a ", "ends in a dot or a space"},
+		{"long segment", strings.Repeat("a", 256), "255 bytes"},
+		{"long path", strings.Repeat("a/", 600), "1024 byte limit"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidatePath(test.path)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("ValidatePath(%q) = %v, want an error that contains %q", test.path, err, test.want)
+			}
+		})
+	}
+}
