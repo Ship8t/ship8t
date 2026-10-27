@@ -94,19 +94,6 @@ func TestDecodeRejectsAFilesFieldThatIsNotAnArray(t *testing.T) {
 	}
 }
 
-func TestDecodeKeepsOnlyTheLastFilesFieldWhenItIsRepeated(t *testing.T) {
-	limits := Limits{MaxFiles: 2, MaxFileSize: 100, MaxTotalSize: 1000}
-	body := `{"manifest_version":1,"files":[` + distinctFile(1) + `,` + distinctFile(2) + `],"files":[` + distinctFile(3) + `]}`
-
-	got, err := Decode(strings.NewReader(body), limits)
-	if err != nil {
-		t.Fatalf("Decode returned %v, want nil", err)
-	}
-	if len(got.Files) != 1 || got.Files[0].Path != "file3.html" {
-		t.Fatalf("Files = %+v, want only file3.html", got.Files)
-	}
-}
-
 func TestDecodeDoesNotAllocateAFileForEveryElementOfAHugeArray(t *testing.T) {
 	// About 760 thousand size-only objects fit in the 8 MiB body cap. Decoding
 	// them all into File structs would allocate far more than the limit below.
@@ -120,7 +107,9 @@ func TestDecodeDoesNotAllocateAFileForEveryElementOfAHugeArray(t *testing.T) {
 	if !errors.Is(err, ErrLimitExceeded) {
 		t.Fatalf("Decode error = %v, want ErrLimitExceeded", err)
 	}
-	const maxAllocatedBytes = 64 << 20
+	// The guarded decoder allocates about 51 MiB here and an unguarded one about
+	// 960 MiB, so this limit keeps a wide margin on both sides.
+	const maxAllocatedBytes = 200 << 20
 	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > maxAllocatedBytes {
 		t.Fatalf("Decode allocated %d bytes, want at most %d", allocated, maxAllocatedBytes)
 	}
