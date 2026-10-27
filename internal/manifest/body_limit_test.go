@@ -41,7 +41,7 @@ func TestDecodeRejectsBodiesOverTheLimit(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := Decode(strings.NewReader(test.body))
+			_, err := Decode(strings.NewReader(test.body), DefaultLimits())
 			if !errors.Is(err, ErrLimitExceeded) {
 				t.Fatalf("Decode error = %v, want ErrLimitExceeded", err)
 			}
@@ -53,7 +53,7 @@ func TestDecodeRejectsBodiesOverTheLimit(t *testing.T) {
 }
 
 func TestDecodeStopsReadingAnEndlessBody(t *testing.T) {
-	_, err := Decode(endlessSpaces{})
+	_, err := Decode(endlessSpaces{}, DefaultLimits())
 	if !errors.Is(err, ErrLimitExceeded) {
 		t.Fatalf("Decode error = %v, want ErrLimitExceeded", err)
 	}
@@ -62,7 +62,7 @@ func TestDecodeStopsReadingAnEndlessBody(t *testing.T) {
 func TestDecodeAcceptsABodyAtTheLimit(t *testing.T) {
 	body := paddedManifest(t, MaxBodyBytes)
 
-	if _, err := Decode(strings.NewReader(body)); err != nil {
+	if _, err := Decode(strings.NewReader(body), DefaultLimits()); err != nil {
 		t.Fatalf("Decode returned %v, want nil", err)
 	}
 }

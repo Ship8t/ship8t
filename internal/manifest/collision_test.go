@@ -107,7 +107,7 @@ func TestDecodeRejectsCollidingPaths(t *testing.T) {
 		{"path":"docs/a.html","size":1,"sha256":"` + validChecksum + `"}
 	]}`
 
-	if _, err := Decode(strings.NewReader(body)); err == nil {
+	if _, err := Decode(strings.NewReader(body), DefaultLimits()); err == nil {
 		t.Fatal("Decode returned nil, want an error")
 	}
 }

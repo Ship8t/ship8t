@@ -33,18 +33,26 @@ type Serve struct {
 	SPAFallback bool `json:"spa_fallback"`
 }
 
+// manifestBody is the JSON form of a Manifest, with a files list that stops
+// decoding at the file count limit.
+type manifestBody struct {
+	ManifestVersion int      `json:"manifest_version"`
+	Files           fileList `json:"files"`
+	Serve           Serve    `json:"serve"`
+}
+
 // Decode reads one manifest from reader and validates it against the manifest
-// rules of ADR 0004. It reads at most MaxBodyBytes and fails with
-// ErrLimitExceeded when the body is longer.
-func Decode(reader io.Reader) (*Manifest, error) {
+// rules and the limits of ADR 0004. It reads at most MaxBodyBytes and fails
+// with ErrLimitExceeded when the body or the manifest goes over a limit.
+func Decode(reader io.Reader, limits Limits) (*Manifest, error) {
 	// Allow one byte more than the limit, so an over-long body is detectable.
 	limited := &io.LimitedReader{R: reader, N: MaxBodyBytes + 1}
 	decoder := json.NewDecoder(limited)
 	// Reject unknown fields so a typo cannot silently change behavior.
 	decoder.DisallowUnknownFields()
 
-	var manifest Manifest
-	decodeErr := decoder.Decode(&manifest)
+	body := manifestBody{Files: fileList{maxFiles: limits.MaxFiles}}
+	decodeErr := decoder.Decode(&body)
 	var trailingErr error
 	if decodeErr == nil {
 		trailingErr = decoder.Decode(&struct{}{})
@@ -59,10 +67,14 @@ func Decode(reader io.Reader) (*Manifest, error) {
 	if !errors.Is(trailingErr, io.EOF) {
 		return nil, errors.New("decode manifest: unexpected data after the manifest")
 	}
+	manifest := &Manifest{ManifestVersion: body.ManifestVersion, Files: body.Files.files, Serve: body.Serve}
 	if err := manifest.validate(); err != nil {
 		return nil, err
 	}
-	return &manifest, nil
+	if err := manifest.checkLimits(limits); err != nil {
+		return nil, err
+	}
+	return manifest, nil
 }
 
 // validate checks the version, the file count, every file, and how the file

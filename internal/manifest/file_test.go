@@ -3,6 +3,7 @@ package manifest
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 )
@@ -33,7 +34,7 @@ func TestDecodeRejectsInvalidFileSizes(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			body := singleFileManifest(t, test.size, validChecksum)
-			if _, err := Decode(strings.NewReader(body)); err == nil {
+			if _, err := Decode(strings.NewReader(body), DefaultLimits()); err == nil {
 				t.Fatalf("Decode(%s) = nil error, want an error", body)
 			}
 		})
@@ -60,7 +61,7 @@ func TestDecodeRejectsInvalidChecksums(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			body := singleFileManifest(t, "1", test.checksum)
-			if _, err := Decode(strings.NewReader(body)); err == nil {
+			if _, err := Decode(strings.NewReader(body), DefaultLimits()); err == nil {
 				t.Fatalf("Decode(%s) = nil error, want an error", body)
 			}
 		})
@@ -69,12 +70,15 @@ func TestDecodeRejectsInvalidChecksums(t *testing.T) {
 
 func TestDecodeRejectsAMissingChecksum(t *testing.T) {
 	body := `{"manifest_version":1,"files":[{"path":"a.html","size":1}]}`
-	if _, err := Decode(strings.NewReader(body)); err == nil {
+	if _, err := Decode(strings.NewReader(body), DefaultLimits()); err == nil {
 		t.Fatal("Decode returned nil, want an error")
 	}
 }
 
 func TestDecodeAcceptsValidSizesAndChecksums(t *testing.T) {
+	// Lift the size limits, because this test is about the size and checksum format.
+	limits := Limits{MaxFiles: 1, MaxFileSize: math.MaxInt64, MaxTotalSize: math.MaxInt64}
+
 	tests := []struct {
 		name     string
 		size     string
@@ -89,7 +93,7 @@ func TestDecodeAcceptsValidSizesAndChecksums(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			body := singleFileManifest(t, test.size, test.checksum)
-			if _, err := Decode(strings.NewReader(body)); err != nil {
+			if _, err := Decode(strings.NewReader(body), limits); err != nil {
 				t.Fatalf("Decode(%s) = %v, want nil", body, err)
 			}
 		})
@@ -99,7 +103,7 @@ func TestDecodeAcceptsValidSizesAndChecksums(t *testing.T) {
 func TestDecodeDoesNotEchoTheChecksum(t *testing.T) {
 	checksum := strings.Repeat("Z", 4096)
 
-	_, err := Decode(strings.NewReader(singleFileManifest(t, "1", checksum)))
+	_, err := Decode(strings.NewReader(singleFileManifest(t, "1", checksum)), DefaultLimits())
 	if err == nil {
 		t.Fatal("Decode returned nil, want an error")
 	}
@@ -114,7 +118,7 @@ func TestDecodeNamesTheFileWithTheInvalidChecksum(t *testing.T) {
 		{"path":"app.js","size":1,"sha256":"abc"}
 	]}`
 
-	_, err := Decode(strings.NewReader(body))
+	_, err := Decode(strings.NewReader(body), DefaultLimits())
 	if err == nil {
 		t.Fatal("Decode returned nil, want an error")
 	}

@@ -32,7 +32,7 @@ func TestDecodeRejectsInvalidManifests(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := Decode(strings.NewReader(test.body)); err == nil {
+			if _, err := Decode(strings.NewReader(test.body), DefaultLimits()); err == nil {
 				t.Fatalf("Decode(%q) = nil error, want an error", test.body)
 			}
 		})
@@ -51,7 +51,7 @@ func TestDecodeRejectsUnsupportedVersions(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := Decode(strings.NewReader(test.body))
+			_, err := Decode(strings.NewReader(test.body), DefaultLimits())
 			if !errors.Is(err, ErrUnsupportedVersion) {
 				t.Fatalf("Decode error = %v, want ErrUnsupportedVersion", err)
 			}
@@ -65,7 +65,7 @@ func TestDecodeNamesTheFileWithTheInvalidPath(t *testing.T) {
 		{"path":"assets//app.js","size":1,"sha256":"` + validChecksum + `"}
 	]}`
 
-	_, err := Decode(strings.NewReader(body))
+	_, err := Decode(strings.NewReader(body), DefaultLimits())
 	if err == nil {
 		t.Fatal("Decode returned nil, want an error")
 	}
@@ -84,7 +84,7 @@ func TestDecodeReadsAValidManifest(t *testing.T) {
 		"serve": {"spa_fallback": true}
 	}`
 
-	got, err := Decode(strings.NewReader(body))
+	got, err := Decode(strings.NewReader(body), DefaultLimits())
 	if err != nil {
 		t.Fatalf("Decode returned %v, want nil", err)
 	}
@@ -105,7 +105,7 @@ func TestDecodeReadsAValidManifest(t *testing.T) {
 func TestDecodeDefaultsServeOptionsToOff(t *testing.T) {
 	body := `{"manifest_version":1,"files":[` + validFile + `]}`
 
-	got, err := Decode(strings.NewReader(body))
+	got, err := Decode(strings.NewReader(body), DefaultLimits())
 	if err != nil {
 		t.Fatalf("Decode returned %v, want nil", err)
 	}
