@@ -36,9 +36,44 @@ type Serve struct {
 // manifestBody is the JSON form of a Manifest, with a files list that stops
 // decoding at the file count limit.
 type manifestBody struct {
-	ManifestVersion int      `json:"manifest_version"`
-	Files           fileList `json:"files"`
-	Serve           Serve    `json:"serve"`
+	ManifestVersion int
+	Files           fileList
+	Serve           Serve
+}
+
+// UnmarshalJSON reads the manifest object, accepting only the exact field names
+// manifest_version, files, and serve. The caller sets the file limit on Files
+// before decoding.
+func (body *manifestBody) UnmarshalJSON(data []byte) error {
+	fields, err := decodeStrictObject(data, "manifest_version", "files", "serve")
+	if err != nil {
+		return err
+	}
+	if err := unmarshalField(fields, "manifest_version", &body.ManifestVersion); err != nil {
+		return err
+	}
+	if raw, found := fields["files"]; found {
+		if err := body.Files.UnmarshalJSON(raw); err != nil {
+			return err
+		}
+	}
+	if raw, found := fields["serve"]; found {
+		if body.Serve, err = decodeServe(raw); err != nil {
+			return fmt.Errorf("serve: %w", err)
+		}
+	}
+	return nil
+}
+
+// decodeServe reads the serve object, accepting only the exact field name
+// spa_fallback.
+func decodeServe(data []byte) (Serve, error) {
+	var serve Serve
+	fields, err := decodeStrictObject(data, "spa_fallback")
+	if err != nil {
+		return serve, err
+	}
+	return serve, unmarshalField(fields, "spa_fallback", &serve.SPAFallback)
 }
 
 // Decode reads one manifest from reader and validates it against the manifest
@@ -48,8 +83,6 @@ func Decode(reader io.Reader, limits Limits) (*Manifest, error) {
 	// Allow one byte more than the limit, so an over-long body is detectable.
 	limited := &io.LimitedReader{R: reader, N: MaxBodyBytes + 1}
 	decoder := json.NewDecoder(limited)
-	// Reject unknown fields so a typo cannot silently change behavior.
-	decoder.DisallowUnknownFields()
 
 	body := manifestBody{Files: fileList{maxFiles: limits.MaxFiles}}
 	decodeErr := decoder.Decode(&body)

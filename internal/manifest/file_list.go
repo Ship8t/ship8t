@@ -10,9 +10,29 @@ import (
 // fileBody is the JSON form of a File. Size is a pointer, so a missing or null
 // size is told apart from an explicit zero.
 type fileBody struct {
-	Path   string `json:"path"`
-	Size   *int64 `json:"size"`
-	SHA256 string `json:"sha256"`
+	Path   string
+	Size   *int64
+	SHA256 string
+}
+
+// decodeFileBody reads one file element, accepting only the exact field names
+// path, size, and sha256.
+func decodeFileBody(data []byte) (fileBody, error) {
+	var entry fileBody
+	fields, err := decodeStrictObject(data, "path", "size", "sha256")
+	if err != nil {
+		return entry, err
+	}
+	if err := unmarshalField(fields, "path", &entry.Path); err != nil {
+		return entry, err
+	}
+	if err := unmarshalField(fields, "size", &entry.Size); err != nil {
+		return entry, err
+	}
+	if err := unmarshalField(fields, "sha256", &entry.SHA256); err != nil {
+		return entry, err
+	}
+	return entry, nil
 }
 
 // fileList decodes the files array of a manifest and stops once the array
@@ -26,13 +46,7 @@ type fileList struct {
 // UnmarshalJSON reads the array one file at a time and fails with
 // ErrLimitExceeded before it decodes a file past maxFiles.
 func (list *fileList) UnmarshalJSON(data []byte) error {
-	// Replace anything a repeated files key decoded before.
-	list.files = nil
-
-	// Decode again with a new decoder, because the outer decoder's strict
-	// field setting does not reach into UnmarshalJSON.
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 
 	token, err := decoder.Token()
 	if err != nil {
@@ -48,16 +62,21 @@ func (list *fileList) UnmarshalJSON(data []byte) error {
 		if len(list.files) >= list.maxFiles {
 			return fmt.Errorf("%w: more than the limit of %d files per deployment", ErrLimitExceeded, list.maxFiles)
 		}
-		var entry fileBody
-		if err := decoder.Decode(&entry); err != nil {
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); err != nil {
 			return err
+		}
+		entry, err := decodeFileBody(raw)
+		if err != nil {
+			return fmt.Errorf("files[%d]: %w", len(list.files), err)
 		}
 		if entry.Size == nil {
 			return fmt.Errorf("files[%d]: size is required, use 0 for an empty file", len(list.files))
 		}
 		list.files = append(list.files, File{Path: entry.Path, Size: *entry.Size, SHA256: entry.SHA256})
 	}
-	// Read the closing bracket.
+	// More also reports false at the end of the input, so only Token notices a
+	// body that ends before the closing bracket.
 	_, err = decoder.Token()
 	return err
 }
