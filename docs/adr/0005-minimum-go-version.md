@@ -1,6 +1,6 @@
 # 0005. Minimum Go version
 
-- **Status** Proposed
+- **Status** Accepted
 - **Date** 2026-10-27
 - **Deciders** Ryan Jay Leyva
 
@@ -65,3 +65,4 @@ The standard library matters too. Go 1.25.14 is the last Go 1.25 release. When t
 ## Status and history
 
 - 2026-10-27. Proposed.
+- 2026-10-27. Accepted. The CI toolchain open item stays proposed until the implementation verifies it.
