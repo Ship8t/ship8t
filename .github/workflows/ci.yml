@@ -16,9 +16,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # Install the newest Go 1.26 patch release, because setup-go reads only the
+      # go line of go.mod and would install exactly 1.26.0. Keep this value in
+      # step with that line.
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version-file: go.mod
+          go-version: '1.26'
+          check-latest: true
       - run: make fmt-check vet staticcheck test
 
   # Kept apart so a new vulnerability report cannot hide a build failure.
@@ -26,7 +30,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # Use the same Go version as the check job.
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version-file: go.mod
+          go-version: '1.26'
+          check-latest: true
       - run: make vuln
