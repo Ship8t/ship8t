@@ -21,6 +21,7 @@ Never edit an accepted ADR silently. To change a decision, write a new ADR that 
 | [0002](0002-deployment-states-and-activation.md) | Deployment states and activation | Accepted |
 | [0003](0003-storage-and-atomic-publish.md) | Storage and atomic publish | Accepted |
 | [0004](0004-api-and-upload-protocol.md) | API and upload protocol | Accepted |
+| [0005](0005-minimum-go-version.md) | Minimum Go version | Proposed |
 
 ## Topics without an ADR yet
 
