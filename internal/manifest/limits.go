@@ -29,12 +29,9 @@ func DefaultLimits() Limits {
 	}
 }
 
-// CheckLimits reports the first limit that manifest goes over, naming it in
-// the error. It expects a manifest that Decode accepted.
-func (manifest *Manifest) CheckLimits(limits Limits) error {
-	if len(manifest.Files) > limits.MaxFiles {
-		return fmt.Errorf("%w: %d files exceeds the limit of %d files per deployment", ErrLimitExceeded, len(manifest.Files), limits.MaxFiles)
-	}
+// checkLimits reports the first file size limit that manifest goes over,
+// naming it in the error. Decode has already enforced MaxFiles while reading.
+func (manifest *Manifest) checkLimits(limits Limits) error {
 	var totalSize int64
 	for index, file := range manifest.Files {
 		if file.Size > limits.MaxFileSize {
