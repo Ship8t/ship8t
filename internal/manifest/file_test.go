@@ -126,3 +126,52 @@ func TestDecodeNamesTheFileWithTheInvalidChecksum(t *testing.T) {
 		t.Fatalf("error %q does not name files[1]", err)
 	}
 }
+
+func TestDecodeRequiresASizeForEveryFile(t *testing.T) {
+	tests := []struct {
+		name string
+		file string
+	}{
+		{"missing size", `{"path":"b.html","sha256":"` + validChecksum + `"}`},
+		{"null size", `{"path":"b.html","size":null,"sha256":"` + validChecksum + `"}`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			body := filesBody(validFile, test.file)
+
+			_, err := Decode(strings.NewReader(body), DefaultLimits())
+			if err == nil {
+				t.Fatalf("Decode(%s) = nil error, want an error", body)
+			}
+			for _, want := range []string{"files[1]", "size is required"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestDecodeAcceptsAnExplicitZeroSize(t *testing.T) {
+	body := filesBody(`{"path":"empty.txt","size":0,"sha256":"` + validChecksum + `"}`)
+
+	got, err := Decode(strings.NewReader(body), DefaultLimits())
+	if err != nil {
+		t.Fatalf("Decode returned %v, want nil", err)
+	}
+	if got.Files[0].Size != 0 {
+		t.Fatalf("Size = %d, want 0", got.Files[0].Size)
+	}
+}
+
+func TestDecodeReportsAMissingSizeBeforeALaterLimitError(t *testing.T) {
+	// A missing size is a shape error, so it wins over the count limit that a later element would hit.
+	limits := Limits{MaxFiles: 1, MaxFileSize: 100, MaxTotalSize: 100}
+	body := filesBody(`{"path":"a.html","sha256":"`+validChecksum+`"}`, validFile)
+
+	_, err := Decode(strings.NewReader(body), limits)
+	if err == nil || !strings.Contains(err.Error(), "size is required") {
+		t.Fatalf("Decode error = %v, want a missing size error", err)
+	}
+}
