@@ -11,11 +11,18 @@ import (
 // writeFile creates a file with the given slash-separated path under directory.
 func writeFile(t *testing.T, directory, path string) {
 	t.Helper()
+	writeFileContent(t, directory, path, "content")
+}
+
+// writeFileContent creates a file with the given content at the slash-separated
+// path under directory.
+func writeFileContent(t *testing.T, directory, path, content string) {
+	t.Helper()
 	full := filepath.Join(directory, filepath.FromSlash(path))
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		t.Fatalf("create directory for %s: %v", path, err)
 	}
-	if err := os.WriteFile(full, []byte("content"), 0o644); err != nil {
+	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }

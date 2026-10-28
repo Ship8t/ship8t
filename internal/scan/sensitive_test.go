@@ -3,6 +3,7 @@ package scan
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -191,5 +192,199 @@ func TestScanSensitiveErrorEscapesNewlinesInNames(t *testing.T) {
 	}
 	if lines := strings.Split(err.Error(), "\n"); len(lines) != 1 {
 		t.Errorf("Scan() error = %q, want a single line, so a file name cannot forge extra lines", err)
+	}
+}
+
+func TestHoldsPrivateKeyHeader(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{"rsa private key", "-----BEGIN RSA PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY-----\n", true},
+		{"plain private key", "-----BEGIN PRIVATE KEY-----\nMIIE\n", true},
+		{"openssh private key", "-----BEGIN OPENSSH PRIVATE KEY-----\nb3Bl\n", true},
+		{"encrypted private key", "-----BEGIN ENCRYPTED PRIVATE KEY-----\nMIIF\n", true},
+		{"ec private key", "-----BEGIN EC PRIVATE KEY-----\nMHcC\n", true},
+		{"after other lines", "notes\n\n-----BEGIN PRIVATE KEY-----\nMIIE\n", true},
+		{"with windows line endings", "notes\r\n-----BEGIN PRIVATE KEY-----\r\nMIIE\r\n", true},
+		{"with leading spaces", "   -----BEGIN PRIVATE KEY-----\n", true},
+		{"inside a json string", `{"private_key": "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n"}`, true},
+		{"inside binary data", "\x00\x01-----BEGIN PRIVATE KEY-----\x00\xff", true},
+		{"two headers on one line", "-----BEGIN PUBLIC KEY----- -----BEGIN PRIVATE KEY-----\n", true},
+
+		{"public key", "-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----\n", false},
+		{"rsa public key", "-----BEGIN RSA PUBLIC KEY-----\nMIIB\n", false},
+		{"certificate", "-----BEGIN CERTIFICATE-----\nMIIC\n-----END CERTIFICATE-----\n", false},
+		{"ssh public key line", "ssh-rsa AAAAB3NzaC1yc2E user@example.com\n", false},
+		{"words without a header", "Never share your PRIVATE KEY with anyone\n", false},
+		{"header without the words", "-----BEGIN-----\nPRIVATE KEY\n", false},
+		{"words on the next line", "-----BEGIN\nPRIVATE KEY\n", false},
+		{"words before the header", "PRIVATE KEY -----BEGIN\n", false},
+		{"lowercase words", "-----BEGIN private key-----\n", false},
+		{"ordinary page", "<html><body>Hello</body></html>\n", false},
+		{"empty file", "", false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := holdsPrivateKeyHeader([]byte(test.content)); got != test.want {
+				t.Errorf("holdsPrivateKeyHeader(%q) = %v, want %v", test.content, got, test.want)
+			}
+		})
+	}
+}
+
+// keyHeader is the first line of a private key in PEM form.
+const keyHeader = "-----BEGIN PRIVATE KEY-----"
+
+func TestScanRejectsPrivateKeyContent(t *testing.T) {
+	tests := []struct {
+		name    string
+		files   map[string]string
+		options Options
+		want    []string
+	}{
+		{
+			name:  "text file that holds a key",
+			files: map[string]string{"index.html": "<html></html>", "notes.txt": keyHeader + "\nMIIE\n"},
+			want:  []string{"notes.txt"},
+		},
+		{
+			name:  "file in a directory",
+			files: map[string]string{"docs/backup.pem": keyHeader + "\nMIIE\n"},
+			want:  []string{"docs/backup.pem"},
+		},
+		{
+			name:  "header that ends at the last byte of the window",
+			files: map[string]string{"a.txt": strings.Repeat("a", sensitiveContentWindow-len(keyHeader)-1) + "\n" + keyHeader},
+			want:  []string{"a.txt"},
+		},
+		{
+			name: "every file that holds a key",
+			files: map[string]string{
+				"index.html": "<html></html>",
+				"a.txt":      keyHeader,
+				"b/c.txt":    keyHeader,
+			},
+			want: []string{"a.txt", "b/c.txt"},
+		},
+		{
+			name:    "file that an include pattern added back",
+			files:   map[string]string{".config": keyHeader},
+			options: Options{Include: []string{".config"}},
+			want:    []string{".config"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			for path, content := range test.files {
+				writeFileContent(t, root, path, content)
+			}
+
+			files, err := Scan(root, test.options)
+			if err == nil {
+				t.Fatalf("Scan() = %v, nil error, want an error", files)
+			}
+			message := err.Error()
+			lines := strings.Split(message, "\n")
+			if len(lines) != len(test.want) {
+				t.Fatalf("Scan() error = %q, want %d lines", message, len(test.want))
+			}
+			for index, path := range test.want {
+				wantStart := `scan "` + path + `": the content holds a private key`
+				if !strings.HasPrefix(lines[index], wantStart) {
+					t.Errorf("line %d = %q, want it to start with %q", index, lines[index], wantStart)
+				}
+				if !strings.Contains(lines[index], `ignore rule "`+path+`"`) {
+					t.Errorf("line %d = %q, want it to show the ignore rule %q", index, lines[index], path)
+				}
+			}
+			if strings.Contains(message, "index.html") {
+				t.Errorf("Scan() error = %q, want it not to name index.html", message)
+			}
+		})
+	}
+}
+
+func TestScanAcceptsFilesWithoutPrivateKeyInTheWindow(t *testing.T) {
+	// The ADR checks only the first 8 KiB, so a header after it goes unseen.
+	afterWindow := strings.Repeat("a", sensitiveContentWindow) + "\n" + keyHeader
+	// A header that the window cuts before the words PRIVATE KEY end is not seen either.
+	cutByWindow := strings.Repeat("a", sensitiveContentWindow-len("-----BEGIN PRIVATE")-1) + "\n" + keyHeader
+
+	tests := []struct {
+		name    string
+		files   map[string]string
+		options Options
+		want    []string
+	}{
+		{
+			name:  "public key",
+			files: map[string]string{"key.txt": "-----BEGIN PUBLIC KEY-----\nMIIB\n"},
+			want:  []string{"key.txt"},
+		},
+		{
+			name:  "header after the window",
+			files: map[string]string{"a.txt": afterWindow},
+			want:  []string{"a.txt"},
+		},
+		{
+			name:  "header cut by the window",
+			files: map[string]string{"a.txt": cutByWindow},
+			want:  []string{"a.txt"},
+		},
+		{
+			name:    "allow sensitive files",
+			files:   map[string]string{"notes.txt": keyHeader},
+			options: Options{AllowSensitiveFiles: true},
+			want:    []string{"notes.txt"},
+		},
+		{
+			name:    "ignore rule that names the file",
+			files:   map[string]string{"index.html": "<html></html>", "notes.txt": keyHeader},
+			options: Options{Ignore: []string{"notes.txt"}},
+			want:    []string{"index.html"},
+		},
+		{
+			name:  "file that a default rule removes",
+			files: map[string]string{"index.html": "<html></html>", ".notes": keyHeader},
+			want:  []string{"index.html"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			for path, content := range test.files {
+				writeFileContent(t, root, path, content)
+			}
+
+			got, err := Scan(root, test.options)
+			if err != nil {
+				t.Fatalf("Scan() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Errorf("Scan() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestScanReportsNameOnceWhenNameAndContentMatch(t *testing.T) {
+	root := t.TempDir()
+	writeFileContent(t, root, "id_rsa", keyHeader+"\nMIIE\n")
+
+	_, err := Scan(root, Options{})
+	if err == nil {
+		t.Fatal("Scan() = nil error, want an error")
+	}
+	if lines := strings.Split(err.Error(), "\n"); len(lines) != 1 {
+		t.Errorf("Scan() error = %q, want one line for the file", err)
+	}
+	if !strings.Contains(err.Error(), "the name looks like a secret") {
+		t.Errorf("Scan() error = %q, want the name reason first", err)
 	}
 }
