@@ -94,12 +94,76 @@ func TestPatternMatches(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pattern, err := parsePattern(test.pattern)
+			parsed, err := parsePattern(test.pattern)
 			if err != nil {
 				t.Fatalf("parsePattern(%q) error = %v", test.pattern, err)
 			}
-			if got := pattern.matches(test.path, test.isDir); got != test.want {
+			if got := parsed.matches(test.path, test.isDir); got != test.want {
 				t.Errorf("pattern %q matches(%q, isDir=%v) = %v, want %v", test.pattern, test.path, test.isDir, got, test.want)
+			}
+		})
+	}
+}
+
+func TestMayMatchBelow(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		dir     string
+		want    bool
+	}{
+		{"file inside the directory", ".github/pages.html", ".github", true},
+		{"file two levels down", ".github/a/pages.html", ".github", true},
+		{"file two levels down, one level in", ".github/a/pages.html", ".github/a", true},
+		{"other directory", ".github/pages.html", ".cache", false},
+		{"directory deeper than the pattern", ".github/pages.html", ".github/pages.html", false},
+		{"directory deeper than the pattern, no match", ".github/pages.html", ".github/a", false},
+		{"pattern that names only the directory", ".github", ".github", false},
+		{"double star in the middle", "a/**/b.txt", "a/x/y", true},
+		{"double star at the start", "**/*.png", ".cache/images", true},
+		{"double star at the end", ".cache/**", ".cache", true},
+		{"star in a segment", ".gith*/pages.html", ".github", true},
+		{"star does not cross a segment", ".gith*/pages.html", ".github/a", false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			parsed, err := parsePattern(test.pattern)
+			if err != nil {
+				t.Fatalf("parsePattern(%q) error = %v", test.pattern, err)
+			}
+			if got := mayMatchBelowAny([]pattern{parsed}, test.dir); got != test.want {
+				t.Errorf("pattern %q mayMatchBelowAny(%q) = %v, want %v", test.pattern, test.dir, got, test.want)
+			}
+		})
+	}
+}
+
+func TestMatchesEntryOrParent(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		path    string
+		isDir   bool
+		want    bool
+	}{
+		{"the entry itself", "a/b.txt", "a/b.txt", false, true},
+		{"the parent directory", "a", "a/b.txt", false, true},
+		{"a directory further up", "a", "a/b/c/d.txt", false, true},
+		{"a parent that only a directory pattern names", "a/", "a/b.txt", false, true},
+		{"a file is not a directory", "a/", "a", false, false},
+		{"a sibling", "a", "b/a.txt", false, false},
+		{"a pattern for a deeper path", "a/b/c.txt", "a/b", true, false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			parsed, err := parsePattern(test.pattern)
+			if err != nil {
+				t.Fatalf("parsePattern(%q) error = %v", test.pattern, err)
+			}
+			if got := matchesEntryOrParent([]pattern{parsed}, test.path, test.isDir); got != test.want {
+				t.Errorf("pattern %q matchesEntryOrParent(%q, isDir=%v) = %v, want %v", test.pattern, test.path, test.isDir, got, test.want)
 			}
 		})
 	}

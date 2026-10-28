@@ -58,6 +58,53 @@ func matchesAny(patterns []pattern, path string, isDir bool) bool {
 	return false
 }
 
+// matchesEntryOrParent reports whether any of the patterns matches the entry or
+// a directory above it.
+func matchesEntryOrParent(patterns []pattern, path string, isDir bool) bool {
+	if matchesAny(patterns, path, isDir) {
+		return true
+	}
+	segments := strings.Split(path, "/")
+	for length := 1; length < len(segments); length++ {
+		if matchesAny(patterns, strings.Join(segments[:length], "/"), true) {
+			return true
+		}
+	}
+	return false
+}
+
+// mayMatchBelowAny reports whether any of the patterns could match a path
+// below the directory at path.
+func mayMatchBelowAny(patterns []pattern, path string) bool {
+	segments := strings.Split(path, "/")
+	for _, candidate := range patterns {
+		if mayMatchBelow(candidate.segments, segments) {
+			return true
+		}
+	}
+	return false
+}
+
+// mayMatchBelow reports whether pattern segments could match a path below the
+// directory made of dirSegments. It may answer true for a pattern that matches
+// no file, but it never answers false for one that does.
+func mayMatchBelow(patternSegments, dirSegments []string) bool {
+	for len(dirSegments) > 0 {
+		if len(patternSegments) == 0 {
+			return false
+		}
+		if patternSegments[0] == "**" {
+			return true
+		}
+		if !matchSegment(patternSegments[0], dirSegments[0]) {
+			return false
+		}
+		patternSegments, dirSegments = patternSegments[1:], dirSegments[1:]
+	}
+	// The directory itself matched, so a segment that is left can match below it.
+	return len(patternSegments) > 0
+}
+
 // matches reports whether the pattern matches the whole slash-separated path
 // of an entry under the deploy directory.
 func (p pattern) matches(path string, isDir bool) bool {
