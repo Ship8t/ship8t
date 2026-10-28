@@ -16,7 +16,7 @@ func TestScanRejectsNonRegularFiles(t *testing.T) {
 		t.Fatalf("create named pipe: %v", err)
 	}
 
-	files, err := Scan(root)
+	files, err := Scan(root, Options{})
 	if err == nil {
 		t.Fatalf("Scan() = %v, nil error, want an error", files)
 	}

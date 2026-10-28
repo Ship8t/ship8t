@@ -35,6 +35,29 @@ func parsePattern(text string) (pattern, error) {
 	return pattern{segments: segments, directoriesOnly: directoriesOnly}, nil
 }
 
+// parsePatterns reads every pattern in texts and stops at the first invalid one.
+func parsePatterns(texts []string) ([]pattern, error) {
+	patterns := make([]pattern, 0, len(texts))
+	for _, text := range texts {
+		parsed, err := parsePattern(text)
+		if err != nil {
+			return nil, err
+		}
+		patterns = append(patterns, parsed)
+	}
+	return patterns, nil
+}
+
+// matchesAny reports whether any of the patterns matches the entry.
+func matchesAny(patterns []pattern, path string, isDir bool) bool {
+	for _, candidate := range patterns {
+		if candidate.matches(path, isDir) {
+			return true
+		}
+	}
+	return false
+}
+
 // matches reports whether the pattern matches the whole slash-separated path
 // of an entry under the deploy directory.
 func (p pattern) matches(path string, isDir bool) bool {
