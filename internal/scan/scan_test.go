@@ -145,6 +145,99 @@ func TestScanListsRegularFiles(t *testing.T) {
 	}
 }
 
+func TestScanSkipsDefaultIgnores(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []string
+		want  []string
+	}{
+		{
+			name:  "git directory",
+			files: []string{"index.html", ".git/config", ".git/objects/ab/cdef"},
+			want:  []string{"index.html"},
+		},
+		{
+			name:  "node_modules at any depth",
+			files: []string{"index.html", "node_modules/lib/index.js", "docs/node_modules/lib/index.js"},
+			want:  []string{"index.html"},
+		},
+		{
+			name:  "ds store at any depth",
+			files: []string{"index.html", ".DS_Store", "assets/.DS_Store"},
+			want:  []string{"index.html"},
+		},
+		{
+			name:  "ship8t config",
+			files: []string{"index.html", "ship8t.json"},
+			want:  []string{"index.html"},
+		},
+		{
+			name:  "dotfiles and dot directories",
+			files: []string{"index.html", ".env", ".cache/data", "assets/.hidden"},
+			want:  []string{"index.html"},
+		},
+		{
+			name:  "well-known directory is kept",
+			files: []string{"index.html", ".well-known/security.txt"},
+			want:  []string{".well-known/security.txt", "index.html"},
+		},
+		{
+			name:  "dotfile inside well-known is skipped",
+			files: []string{".well-known/security.txt", ".well-known/.hidden"},
+			want:  []string{".well-known/security.txt"},
+		},
+		{
+			name:  "node_modules file is kept",
+			files: []string{"docs/node_modules"},
+			want:  []string{"docs/node_modules"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			for _, path := range test.files {
+				writeFile(t, root, path)
+			}
+
+			got, err := Scan(root)
+			if err != nil {
+				t.Fatalf("Scan() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Errorf("Scan() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestScanSkipsSymlinksUnderIgnoredPaths(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "index.html")
+	writeFile(t, root, "node_modules/lib/index.js")
+	symlink(t, root, "../lib/index.js", "node_modules/.bin/tool")
+	symlink(t, root, "index.html", ".hidden-link")
+
+	got, err := Scan(root)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if want := []string{"index.html"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Scan() = %v, want %v", got, want)
+	}
+}
+
+func TestScanRejectsSymlinkBesideIgnoredPaths(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "index.html")
+	writeFile(t, root, ".git/config")
+	symlink(t, root, "index.html", "link.html")
+
+	if files, err := Scan(root); err == nil {
+		t.Fatalf("Scan() = %v, nil error, want an error for link.html", files)
+	}
+}
+
 func TestScanFailsOnMissingDirectory(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	if files, err := Scan(missing); err == nil {
