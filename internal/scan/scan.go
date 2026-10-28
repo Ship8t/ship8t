@@ -2,6 +2,7 @@
 package scan
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -63,7 +64,13 @@ func Scan(directory string, options Options) ([]string, error) {
 	files := []string{}
 	err = fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return fmt.Errorf("scan %s: %w", path, walkErr)
+			// Drop the raw path that a file system error repeats, so the path
+			// appears once and quoted.
+			var pathErr *fs.PathError
+			if errors.As(walkErr, &pathErr) {
+				walkErr = pathErr.Err
+			}
+			return fmt.Errorf("scan %q: %w", path, walkErr)
 		}
 		// Skip ignored entries before the type checks, so an ignored symlink
 		// or an ignored directory is never read.
@@ -77,10 +84,10 @@ func Scan(directory string, options Options) ([]string, error) {
 			return nil
 		}
 		if entry.Type()&fs.ModeSymlink != 0 {
-			return fmt.Errorf("scan %s: symlinks are not allowed, remove the symlink", path)
+			return fmt.Errorf("scan %q: symlinks are not allowed, remove the symlink", path)
 		}
 		if !entry.Type().IsRegular() {
-			return fmt.Errorf("scan %s: not a regular file, remove it from the deploy directory", path)
+			return fmt.Errorf("scan %q: not a regular file, remove it from the deploy directory", path)
 		}
 		files = append(files, path)
 		return nil
