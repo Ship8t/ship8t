@@ -20,8 +20,18 @@ type Options struct {
 	// matches. It never overrides an Ignore pattern.
 	Include []string
 	// AllowSensitiveFiles turns off the check that fails the scan when a listed
-	// file has a name that looks like a secret.
+	// file has a name or content that looks like a secret.
 	AllowSensitiveFiles bool
+}
+
+// withoutPath drops the raw path that a file system error repeats, so the
+// caller can print the path once, quoted.
+func withoutPath(err error) error {
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		return pathErr.Err
+	}
+	return err
 }
 
 // skipEntry reports whether the walk skips the entry at path, and the whole
@@ -42,8 +52,8 @@ func skipEntry(path string, isDir bool, ignorePatterns, includePatterns []patter
 // sorted by byte order. It skips the entries that the default ignore rules of
 // ADR 0001 and the ignore patterns of options name, except the paths that the
 // include patterns add back. It fails on any other symlink or file that is not
-// a regular file, and on any listed file whose name looks like a secret, and
-// names the path in the error.
+// a regular file, and on any listed file whose name or first bytes look like a
+// secret, and names the path in the error.
 func Scan(directory string, options Options) ([]string, error) {
 	ignorePatterns, err := parsePatterns(options.Ignore)
 	if err != nil {
@@ -64,13 +74,7 @@ func Scan(directory string, options Options) ([]string, error) {
 	files := []string{}
 	err = fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			// Drop the raw path that a file system error repeats, so the path
-			// appears once and quoted.
-			var pathErr *fs.PathError
-			if errors.As(walkErr, &pathErr) {
-				walkErr = pathErr.Err
-			}
-			return fmt.Errorf("scan %q: %w", path, walkErr)
+			return fmt.Errorf("scan %q: %w", path, withoutPath(walkErr))
 		}
 		// Skip ignored entries before the type checks, so an ignored symlink
 		// or an ignored directory is never read.
@@ -99,7 +103,7 @@ func Scan(directory string, options Options) ([]string, error) {
 	// "a.html", while a byte sort puts "a.html" first.
 	slices.Sort(files)
 	if !options.AllowSensitiveFiles {
-		if err := checkSensitiveFiles(files); err != nil {
+		if err := checkSensitiveFiles(root, files); err != nil {
 			return nil, err
 		}
 	}

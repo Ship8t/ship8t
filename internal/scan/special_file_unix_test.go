@@ -95,3 +95,30 @@ func TestScanErrorsQuoteNamesWithNewlines(t *testing.T) {
 		})
 	}
 }
+
+func TestScanFailsOnUnreadableFileAndQuotesItsName(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "index.html")
+	writeFile(t, root, nameWithNewline)
+	locked := filepath.Join(root, nameWithNewline)
+	if err := os.Chmod(locked, 0o000); err != nil {
+		t.Fatalf("remove access to the file: %v", err)
+	}
+	// A process with the right to read any file, such as root, cannot fail here.
+	if _, err := os.ReadFile(locked); err == nil {
+		t.Skip("the file is still readable, run the test as a normal user")
+	}
+
+	files, err := Scan(root, Options{})
+	if err == nil {
+		t.Fatalf("Scan() = %v, nil error, want an error", files)
+	}
+	if lines := strings.Split(err.Error(), "\n"); len(lines) != 1 {
+		t.Errorf("Scan() error = %q, want a single line, so a file name cannot forge extra lines", err)
+	}
+	for _, want := range []string{"permission denied", `\n`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Scan() error = %q, want it to contain %q", err, want)
+		}
+	}
+}
