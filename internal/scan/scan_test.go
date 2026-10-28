@@ -32,6 +32,24 @@ func symlink(t *testing.T, directory, target, path string) {
 	}
 }
 
+// assertScan creates the files under a new directory, scans it with options,
+// and fails the test unless the scan succeeds and lists exactly want.
+func assertScan(t *testing.T, files []string, options Options, want []string) {
+	t.Helper()
+	root := t.TempDir()
+	for _, path := range files {
+		writeFile(t, root, path)
+	}
+
+	got, err := Scan(root, options)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Scan() = %v, want %v", got, want)
+	}
+}
+
 func TestScanRejectsSymlinks(t *testing.T) {
 	outside := t.TempDir()
 	writeFile(t, outside, "secret.txt")
@@ -129,18 +147,7 @@ func TestScanListsRegularFiles(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			root := t.TempDir()
-			for _, path := range test.files {
-				writeFile(t, root, path)
-			}
-
-			got, err := Scan(root, Options{})
-			if err != nil {
-				t.Fatalf("Scan() error = %v", err)
-			}
-			if !reflect.DeepEqual(got, test.want) {
-				t.Errorf("Scan() = %v, want %v", got, test.want)
-			}
+			assertScan(t, test.files, Options{}, test.want)
 		})
 	}
 }
@@ -195,18 +202,7 @@ func TestScanSkipsDefaultIgnores(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			root := t.TempDir()
-			for _, path := range test.files {
-				writeFile(t, root, path)
-			}
-
-			got, err := Scan(root, Options{})
-			if err != nil {
-				t.Fatalf("Scan() error = %v", err)
-			}
-			if !reflect.DeepEqual(got, test.want) {
-				t.Errorf("Scan() = %v, want %v", got, test.want)
-			}
+			assertScan(t, test.files, Options{}, test.want)
 		})
 	}
 }
@@ -303,18 +299,7 @@ func TestScanSkipsIgnorePatterns(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			root := t.TempDir()
-			for _, path := range test.files {
-				writeFile(t, root, path)
-			}
-
-			got, err := Scan(root, Options{Ignore: test.ignore})
-			if err != nil {
-				t.Fatalf("Scan() error = %v", err)
-			}
-			if !reflect.DeepEqual(got, test.want) {
-				t.Errorf("Scan() = %v, want %v", got, test.want)
-			}
+			assertScan(t, test.files, Options{Ignore: test.ignore}, test.want)
 		})
 	}
 }
@@ -454,18 +439,7 @@ func TestScanAppliesIncludePatterns(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			root := t.TempDir()
-			for _, path := range test.files {
-				writeFile(t, root, path)
-			}
-
-			got, err := Scan(root, Options{Include: test.include, Ignore: test.ignore})
-			if err != nil {
-				t.Fatalf("Scan() error = %v", err)
-			}
-			if !reflect.DeepEqual(got, test.want) {
-				t.Errorf("Scan() = %v, want %v", got, test.want)
-			}
+			assertScan(t, test.files, Options{Include: test.include, Ignore: test.ignore}, test.want)
 		})
 	}
 }
