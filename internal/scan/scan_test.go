@@ -93,7 +93,7 @@ func TestScanRejectsSymlinks(t *testing.T) {
 			root := t.TempDir()
 			test.build(t, root)
 
-			files, err := Scan(root)
+			files, err := Scan(root, Options{})
 			if err == nil {
 				t.Fatalf("Scan() = %v, nil error, want an error", files)
 			}
@@ -134,7 +134,7 @@ func TestScanListsRegularFiles(t *testing.T) {
 				writeFile(t, root, path)
 			}
 
-			got, err := Scan(root)
+			got, err := Scan(root, Options{})
 			if err != nil {
 				t.Fatalf("Scan() error = %v", err)
 			}
@@ -200,7 +200,7 @@ func TestScanSkipsDefaultIgnores(t *testing.T) {
 				writeFile(t, root, path)
 			}
 
-			got, err := Scan(root)
+			got, err := Scan(root, Options{})
 			if err != nil {
 				t.Fatalf("Scan() error = %v", err)
 			}
@@ -218,7 +218,7 @@ func TestScanSkipsSymlinksUnderIgnoredPaths(t *testing.T) {
 	symlink(t, root, "../lib/index.js", "node_modules/.bin/tool")
 	symlink(t, root, "index.html", ".hidden-link")
 
-	got, err := Scan(root)
+	got, err := Scan(root, Options{})
 	if err != nil {
 		t.Fatalf("Scan() error = %v", err)
 	}
@@ -233,14 +233,138 @@ func TestScanRejectsSymlinkBesideIgnoredPaths(t *testing.T) {
 	writeFile(t, root, ".git/config")
 	symlink(t, root, "index.html", "link.html")
 
-	if files, err := Scan(root); err == nil {
+	if files, err := Scan(root, Options{}); err == nil {
 		t.Fatalf("Scan() = %v, nil error, want an error for link.html", files)
+	}
+}
+
+func TestScanSkipsIgnorePatterns(t *testing.T) {
+	tests := []struct {
+		name   string
+		files  []string
+		ignore []string
+		want   []string
+	}{
+		{
+			name:   "extension at any depth",
+			files:  []string{"index.html", "app.js.map", "assets/app.js", "assets/app.js.map"},
+			ignore: []string{"**/*.map"},
+			want:   []string{"assets/app.js", "index.html"},
+		},
+		{
+			name:   "extension at the root only",
+			files:  []string{"index.html", "app.js.map", "assets/app.js.map"},
+			ignore: []string{"*.map"},
+			want:   []string{"assets/app.js.map", "index.html"},
+		},
+		{
+			name:   "directory pattern removes the root directory only",
+			files:  []string{"index.html", "build/out.js", "docs/build"},
+			ignore: []string{"build/"},
+			want:   []string{"docs/build", "index.html"},
+		},
+		{
+			name:   "double star removes a whole tree",
+			files:  []string{"index.html", "drafts/a.html", "drafts/deep/b.html"},
+			ignore: []string{"drafts/**"},
+			want:   []string{"index.html"},
+		},
+		{
+			name:   "directory name without a slash removes the tree",
+			files:  []string{"index.html", "drafts/a.html", "drafts/deep/b.html"},
+			ignore: []string{"drafts"},
+			want:   []string{"index.html"},
+		},
+		{
+			name:   "one exact file",
+			files:  []string{"docs/draft.html", "docs/index.html"},
+			ignore: []string{"docs/draft.html"},
+			want:   []string{"docs/index.html"},
+		},
+		{
+			name:   "several patterns",
+			files:  []string{"a.tmp", "b.bak", "c.html"},
+			ignore: []string{"*.tmp", "*.bak"},
+			want:   []string{"c.html"},
+		},
+		{
+			name:   "patterns add to the default rules",
+			files:  []string{"index.html", ".hidden", "notes.txt"},
+			ignore: []string{"notes.txt"},
+			want:   []string{"index.html"},
+		},
+		{
+			name:   "pattern that matches nothing",
+			files:  []string{"index.html", "assets/app.js"},
+			ignore: []string{"missing/**"},
+			want:   []string{"assets/app.js", "index.html"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			for _, path := range test.files {
+				writeFile(t, root, path)
+			}
+
+			got, err := Scan(root, Options{Ignore: test.ignore})
+			if err != nil {
+				t.Fatalf("Scan() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Errorf("Scan() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestScanSkipsSymlinkThatIgnorePatternNames(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "index.html")
+	symlink(t, root, "index.html", "link.html")
+
+	got, err := Scan(root, Options{Ignore: []string{"link.html"}})
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if want := []string{"index.html"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Scan() = %v, want %v", got, want)
+	}
+}
+
+func TestScanRejectsSymlinkThatIgnorePatternsMiss(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "index.html")
+	symlink(t, root, "index.html", "link.html")
+
+	files, err := Scan(root, Options{Ignore: []string{"*.map"}})
+	if err == nil {
+		t.Fatalf("Scan() = %v, nil error, want an error for link.html", files)
+	}
+	if !strings.Contains(err.Error(), "link.html") {
+		t.Errorf("Scan() error = %q, want it to name link.html", err)
+	}
+}
+
+func TestScanRejectsInvalidIgnorePattern(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "index.html")
+
+	files, err := Scan(root, Options{Ignore: []string{"*.map", "!index.html"}})
+	if err == nil {
+		t.Fatalf("Scan() = %v, nil error, want an error", files)
+	}
+	for _, want := range []string{"ignore", "negation"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Scan() error = %q, want it to contain %q", err, want)
+		}
 	}
 }
 
 func TestScanFailsOnMissingDirectory(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
-	if files, err := Scan(missing); err == nil {
+	if files, err := Scan(missing, Options{}); err == nil {
 		t.Fatalf("Scan(%q) = %v, nil error, want an error", missing, files)
 	}
 }
@@ -249,7 +373,7 @@ func TestScanFailsOnFileAsRoot(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "index.html")
 	path := filepath.Join(root, "index.html")
-	if files, err := Scan(path); err == nil {
+	if files, err := Scan(path, Options{}); err == nil {
 		t.Fatalf("Scan(%q) = %v, nil error, want an error", path, files)
 	}
 }
