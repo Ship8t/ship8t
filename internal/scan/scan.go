@@ -18,6 +18,9 @@ type Options struct {
 	// removed them. A pattern also adds back everything below a directory it
 	// matches. It never overrides an Ignore pattern.
 	Include []string
+	// AllowSensitiveFiles turns off the check that fails the scan when a listed
+	// file has a name that looks like a secret.
+	AllowSensitiveFiles bool
 }
 
 // skipEntry reports whether the walk skips the entry at path, and the whole
@@ -38,7 +41,8 @@ func skipEntry(path string, isDir bool, ignorePatterns, includePatterns []patter
 // sorted by byte order. It skips the entries that the default ignore rules of
 // ADR 0001 and the ignore patterns of options name, except the paths that the
 // include patterns add back. It fails on any other symlink or file that is not
-// a regular file, and names the path in the error.
+// a regular file, and on any listed file whose name looks like a secret, and
+// names the path in the error.
 func Scan(directory string, options Options) ([]string, error) {
 	ignorePatterns, err := parsePatterns(options.Ignore)
 	if err != nil {
@@ -87,5 +91,10 @@ func Scan(directory string, options Options) ([]string, error) {
 	// Sort the full paths, because the walk visits directory "a" before file
 	// "a.html", while a byte sort puts "a.html" first.
 	slices.Sort(files)
+	if !options.AllowSensitiveFiles {
+		if err := checkSensitiveFiles(files); err != nil {
+			return nil, err
+		}
+	}
 	return files, nil
 }
