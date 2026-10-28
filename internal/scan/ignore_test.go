@@ -37,3 +37,33 @@ func TestIgnoredByDefault(t *testing.T) {
 		})
 	}
 }
+
+func TestRemovedByDefault(t *testing.T) {
+	tests := []struct {
+		name  string
+		path  string
+		isDir bool
+		want  bool
+	}{
+		{"regular file", "index.html", false, false},
+		{"nested regular file", "assets/css/site.css", false, false},
+		{"dotfile at the root", ".env", false, true},
+		{"dotfile in a directory", "docs/.hidden", false, true},
+		{"file below a dot directory", ".git/config", false, true},
+		{"file deep below a dot directory", ".cache/a/b/c.txt", false, true},
+		{"file below node_modules", "docs/node_modules/lib/index.js", false, true},
+		{"node_modules directory", "docs/node_modules", true, true},
+		{"node_modules file", "docs/node_modules", false, false},
+		{"file below well-known", ".well-known/security.txt", false, false},
+		{"dotfile below well-known", ".well-known/.hidden", false, true},
+		{"ship8t config at any depth", "docs/ship8t.json", false, true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := removedByDefault(test.path, test.isDir); got != test.want {
+				t.Errorf("removedByDefault(%q, isDir=%v) = %v, want %v", test.path, test.isDir, got, test.want)
+			}
+		})
+	}
+}

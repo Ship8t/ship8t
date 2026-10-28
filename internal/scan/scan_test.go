@@ -362,6 +362,157 @@ func TestScanRejectsInvalidIgnorePattern(t *testing.T) {
 	}
 }
 
+func TestScanAppliesIncludePatterns(t *testing.T) {
+	tests := []struct {
+		name    string
+		files   []string
+		include []string
+		ignore  []string
+		want    []string
+	}{
+		{
+			name:    "adds back one file of a skipped directory",
+			files:   []string{"index.html", ".github/pages.html", ".github/other.html"},
+			include: []string{".github/pages.html"},
+			want:    []string{".github/pages.html", "index.html"},
+		},
+		{
+			name:    "adds back a dotfile at the root",
+			files:   []string{"index.html", ".htaccess", ".env"},
+			include: []string{".htaccess"},
+			want:    []string{".htaccess", "index.html"},
+		},
+		{
+			name:    "adds back a dotfile only where the pattern says",
+			files:   []string{"index.html", ".htaccess", "docs/.htaccess"},
+			include: []string{".htaccess"},
+			want:    []string{".htaccess", "index.html"},
+		},
+		{
+			name:    "adds back a skipped directory and what is below it",
+			files:   []string{"index.html", ".cache/a.txt", ".cache/deep/b.txt"},
+			include: []string{".cache"},
+			want:    []string{".cache/a.txt", ".cache/deep/b.txt", "index.html"},
+		},
+		{
+			name:    "adds back a directory with a trailing slash pattern",
+			files:   []string{"index.html", ".cache/a.txt"},
+			include: []string{".cache/"},
+			want:    []string{".cache/a.txt", "index.html"},
+		},
+		{
+			name:    "adds back the dotfiles below an included directory",
+			files:   []string{"index.html", ".cache/a.txt", ".cache/.hidden"},
+			include: []string{".cache"},
+			want:    []string{".cache/.hidden", ".cache/a.txt", "index.html"},
+		},
+		{
+			name:    "adds back a nested directory of a skipped directory",
+			files:   []string{".github/pages/a.html", ".github/pages/deep/b.html", ".github/other.html"},
+			include: []string{".github/pages"},
+			want:    []string{".github/pages/a.html", ".github/pages/deep/b.html"},
+		},
+		{
+			name:    "adds back a file below node_modules",
+			files:   []string{"index.html", "node_modules/lib/index.js", "node_modules/lib/skip.js"},
+			include: []string{"node_modules/lib/index.js"},
+			want:    []string{"index.html", "node_modules/lib/index.js"},
+		},
+		{
+			name:    "adds back files with a double star",
+			files:   []string{"index.html", ".cache/a.txt", ".cache/.hidden"},
+			include: []string{".cache/**"},
+			want:    []string{".cache/.hidden", ".cache/a.txt", "index.html"},
+		},
+		{
+			name:    "pattern that matches nothing changes nothing",
+			files:   []string{"index.html", ".hidden", ".cache/a.txt"},
+			include: []string{"missing/**"},
+			want:    []string{"index.html"},
+		},
+		{
+			name:    "pattern does not add back a file that no default rule removed",
+			files:   []string{"index.html", "a.txt"},
+			include: []string{"a.txt"},
+			want:    []string{"a.txt", "index.html"},
+		},
+		{
+			name:    "ignore wins over include",
+			files:   []string{".cache/a.txt", ".cache/b.txt"},
+			include: []string{".cache"},
+			ignore:  []string{"**/b.txt"},
+			want:    []string{".cache/a.txt"},
+		},
+		{
+			name:    "ignore on the directory wins over include",
+			files:   []string{"index.html", ".cache/a.txt"},
+			include: []string{".cache/a.txt"},
+			ignore:  []string{".cache"},
+			want:    []string{"index.html"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			for _, path := range test.files {
+				writeFile(t, root, path)
+			}
+
+			got, err := Scan(root, Options{Include: test.include, Ignore: test.ignore})
+			if err != nil {
+				t.Fatalf("Scan() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Errorf("Scan() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestScanSkipsSymlinkInDirectoryThatIncludeOpens(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, ".github/pages.html")
+	symlink(t, root, "pages.html", ".github/link")
+
+	got, err := Scan(root, Options{Include: []string{".github/pages.html"}})
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if want := []string{".github/pages.html"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Scan() = %v, want %v", got, want)
+	}
+}
+
+func TestScanRejectsSymlinkThatIncludeAddsBack(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "index.html")
+	symlink(t, root, "index.html", ".link")
+
+	files, err := Scan(root, Options{Include: []string{".link"}})
+	if err == nil {
+		t.Fatalf("Scan() = %v, nil error, want an error", files)
+	}
+	if !strings.Contains(err.Error(), ".link") || !strings.Contains(err.Error(), "symlink") {
+		t.Errorf("Scan() error = %q, want it to name .link and mention a symlink", err)
+	}
+}
+
+func TestScanRejectsInvalidIncludePattern(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "index.html")
+
+	files, err := Scan(root, Options{Include: []string{"/abs"}})
+	if err == nil {
+		t.Fatalf("Scan() = %v, nil error, want an error", files)
+	}
+	for _, want := range []string{"include", "relative"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Scan() error = %q, want it to contain %q", err, want)
+		}
+	}
+}
+
 func TestScanFailsOnMissingDirectory(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	if files, err := Scan(missing, Options{}); err == nil {
