@@ -5,16 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/ship8t/ship8t/internal/strictjson"
 )
 
 // projectSeeds returns a few valid files and one input for each rule of the
@@ -27,6 +31,8 @@ func projectSeeds() []string {
 		`{"directory":"."}`,
 		`{"directory":"build/public"}`,
 		`{"ignore":[],"include":[]}`,
+		`{"ignore":["a\tb"]}`,
+		`{"ignore":["` + string([]byte{0xff, 0xfe}) + `"]}`,
 		`{"serve":{"spa_fallback":false}}`,
 		// Field rules.
 		`{"token":"s3cret"}`,
@@ -162,6 +168,163 @@ func encodeProjectFile(t *testing.T, file ProjectFile) []byte {
 	return encodeJSON(t, object)
 }
 
+// jsonEntry is one field of a JSON object, in the order of the input.
+type jsonEntry struct {
+	name string
+	raw  json.RawMessage
+}
+
+// readObject reads data as exactly one JSON object with nothing after it, and
+// returns its fields in order. It does not use the decoders under test, so it is
+// a second opinion about what the input says. It reports false for anything
+// else.
+func readObject(data []byte) ([]jsonEntry, bool) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
+		return nil, false
+	}
+	var entries []jsonEntry
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, false
+		}
+		name, isString := token.(string)
+		if !isString {
+			return nil, false
+		}
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); err != nil {
+			return nil, false
+		}
+		entries = append(entries, jsonEntry{name: name, raw: raw})
+	}
+	if token, err := decoder.Token(); err != nil || token != json.Delim('}') {
+		return nil, false
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return nil, false
+	}
+	return entries, true
+}
+
+// acceptedFields fails the test unless an accepted input holds only the allowed
+// field names, each once and none of them null, and returns the raw value of
+// each field. The decoders must reject an input that breaks these rules, so an
+// accepted input that does shows a decoder that is too lenient.
+func acceptedFields(t *testing.T, data []byte, allowed ...string) map[string]json.RawMessage {
+	t.Helper()
+	entries, ok := readObject(data)
+	if !ok {
+		t.Fatalf("accepted %q, which is not exactly one JSON object", data)
+	}
+	fields := make(map[string]json.RawMessage, len(entries))
+	for _, entry := range entries {
+		if !slices.Contains(allowed, entry.name) {
+			t.Errorf("accepted the field %q, which is not one of %v", entry.name, allowed)
+		}
+		if _, repeated := fields[entry.name]; repeated {
+			t.Errorf("accepted the field %q more than once", entry.name)
+		}
+		if strictjson.IsNull(entry.raw) {
+			t.Errorf("accepted null for the field %q", entry.name)
+		}
+		fields[entry.name] = entry.raw
+	}
+	return fields
+}
+
+// wantString returns the string that the input holds for a field, or the empty
+// string when the field is absent. An accepted input never holds an empty
+// string, so it reports one.
+func wantString(t *testing.T, fields map[string]json.RawMessage, name string) string {
+	t.Helper()
+	raw, found := fields[name]
+	if !found {
+		return ""
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		t.Errorf("accepted %s that is not a string: %s", name, raw)
+		return ""
+	}
+	if value == "" {
+		t.Errorf("accepted an empty %s", name)
+	}
+	return value
+}
+
+// wantStringList returns the strings that the input holds for a list field, nil
+// when the field is absent, and an empty list for an empty array.
+func wantStringList(t *testing.T, fields map[string]json.RawMessage, name string) []string {
+	t.Helper()
+	raw, found := fields[name]
+	if !found {
+		return nil
+	}
+	var entries []*string
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		t.Errorf("accepted %s that is not a list of strings: %s", name, raw)
+		return nil
+	}
+	list := make([]string, 0, len(entries))
+	for index, entry := range entries {
+		if entry == nil {
+			t.Errorf("accepted null as entry %d of %s", index, name)
+			continue
+		}
+		list = append(list, *entry)
+	}
+	return list
+}
+
+// checkAcceptedProjectAgainstInput fails the test unless the settings of an
+// accepted project file are exactly what the input says. A decoder that trims,
+// lowercases, truncates, drops a field, or keeps the last of a repeated field
+// would return valid settings, so the checks of the values alone cannot see it.
+func checkAcceptedProjectAgainstInput(t *testing.T, body []byte, file ProjectFile) {
+	t.Helper()
+	fields := acceptedFields(t, body, "project", "directory", "ignore", "include", "serve")
+	if want := wantString(t, fields, "project"); file.Project != want {
+		t.Errorf("project = %q, want exactly what the input says, %q", file.Project, want)
+	}
+	if want := wantString(t, fields, "directory"); file.Directory != want {
+		t.Errorf("directory = %q, want exactly what the input says, %q", file.Directory, want)
+	}
+	if want := wantStringList(t, fields, "ignore"); !reflect.DeepEqual(file.Ignore, want) {
+		t.Errorf("ignore = %q, want exactly what the input says, %q", file.Ignore, want)
+	}
+	if want := wantStringList(t, fields, "include"); !reflect.DeepEqual(file.Include, want) {
+		t.Errorf("include = %q, want exactly what the input says, %q", file.Include, want)
+	}
+
+	wantSPAFallback := false
+	if raw, found := fields["serve"]; found {
+		serveFields := acceptedFields(t, raw, "spa_fallback")
+		if value, found := serveFields["spa_fallback"]; found {
+			if err := json.Unmarshal(value, &wantSPAFallback); err != nil {
+				t.Errorf("accepted spa_fallback that is not a boolean: %s", value)
+			}
+		}
+	}
+	if file.Serve.SPAFallback != wantSPAFallback {
+		t.Errorf("spa_fallback = %v, want exactly what the input says, %v", file.Serve.SPAFallback, wantSPAFallback)
+	}
+}
+
+// checkAcceptedUserAgainstInput fails the test unless the settings of an
+// accepted user config are exactly what the input says.
+func checkAcceptedUserAgainstInput(t *testing.T, body []byte, file UserFile) {
+	t.Helper()
+	fields := acceptedFields(t, body, "server", "token")
+	if want := wantString(t, fields, "server"); file.Server != want {
+		t.Errorf("server = %q, want exactly what the input says, %q", file.Server, want)
+	}
+	if want := wantString(t, fields, "token"); file.Token != want {
+		t.Errorf("token = %q, want exactly what the input says, %q", file.Token, want)
+	}
+}
+
 func FuzzDecodeProjectFile(f *testing.F) {
 	for _, seed := range projectSeeds() {
 		f.Add([]byte(seed))
@@ -176,10 +339,14 @@ func FuzzDecodeProjectFile(f *testing.F) {
 			return
 		}
 
+		if len(body) > maxProjectFileBytes {
+			t.Errorf("accepted a file of %d bytes, over the limit of %d", len(body), maxProjectFileBytes)
+		}
 		if file.Project != "" && !isSlug(file.Project) {
 			t.Errorf("accepted the project %q that is not a slug", file.Project)
 		}
 		checkAcceptedDirectory(t, file.Directory)
+		checkAcceptedProjectAgainstInput(t, body, file)
 
 		// Decode what a tool would write for these settings. It must give the same
 		// settings, or a saved file could change meaning.
@@ -237,6 +404,9 @@ func userSeeds() []string {
 		`{"server":"https://alice:hunter2@example.com"}`,
 		`{"server":"https://alice:hunter2@exa mple.com"}`,
 		`{"server":"https://example.com:443@evil.example"}`,
+		`{"server":"https://` + strings.Repeat("a", 2048) + `.example"}`,
+		`{"server":" https://example.com"}`,
+		`{"server":"https://deploy.example.com/"}`,
 		`{"server":"https://exa\u202emple.com"}`,
 		`{"server":"https://exa\u200bmple.com"}`,
 		`{"server":"https://exa\u2028mple.com"}`,
@@ -245,6 +415,9 @@ func userSeeds() []string {
 		`{"token":""}`,
 		`{"token":"abc def"}`,
 		`{"token":"s3cret value"}`,
+		`{"token":" abc"}`,
+		`{"token":"abc ","server":"https://example.com"}`,
+		`{"token":"abc","token":"def"}`,
 		`{"token":"abc\r\nX-Evil:1"}`,
 		`{"token":"abc\nX-Evil:1"}`,
 		`{"token":"abc\rX-Evil:1"}`,
@@ -378,8 +551,10 @@ func FuzzDecodeUserFile(f *testing.F) {
 			}
 			// An error must never repeat a value that can hold a secret. The error
 			// for an unknown field quotes the name of the field on purpose, so a typo
-			// is easy to see, and a name is not a value.
-			if strings.Contains(err.Error(), "unknown field") {
+			// is easy to see, and a name is not a value. Test for the type of the
+			// error, because the text of a message can come from the input.
+			var unknown *strictjson.UnknownFieldError
+			if errors.As(err, &unknown) {
 				return
 			}
 			for _, secret := range []string{"hunter2", "s3cret"} {
@@ -389,7 +564,11 @@ func FuzzDecodeUserFile(f *testing.F) {
 			}
 			return
 		}
+		if len(body) > maxUserFileBytes {
+			t.Errorf("accepted a file of %d bytes, over the limit of %d", len(body), maxUserFileBytes)
+		}
 		checkAcceptedUser(t, file)
+		checkAcceptedUserAgainstInput(t, body, file)
 
 		encoded := encodeUserFile(t, file)
 		again, err := DecodeUserFile(bytes.NewReader(encoded))
