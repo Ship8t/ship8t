@@ -101,13 +101,24 @@ func Decode(reader io.Reader, limits Limits) (*Manifest, error) {
 		return nil, errors.New("decode manifest: unexpected data after the manifest")
 	}
 	manifest := &Manifest{ManifestVersion: body.ManifestVersion, Files: body.Files.files, Serve: body.Serve}
-	if err := manifest.validate(); err != nil {
-		return nil, err
-	}
-	if err := manifest.checkLimits(limits); err != nil {
+	if err := manifest.Validate(limits); err != nil {
 		return nil, err
 	}
 	return manifest, nil
+}
+
+// Validate checks a manifest against the manifest rules and the limits of ADR
+// 0004, so a client can check a manifest it built with the rules that Decode
+// applies on the server. It checks the file count first, so a huge list is
+// rejected before any work for each file.
+func (manifest *Manifest) Validate(limits Limits) error {
+	if len(manifest.Files) > limits.MaxFiles {
+		return errTooManyFiles(limits.MaxFiles)
+	}
+	if err := manifest.validate(); err != nil {
+		return err
+	}
+	return manifest.checkLimits(limits)
 }
 
 // validate checks the version, the file count, every file, and how the file
