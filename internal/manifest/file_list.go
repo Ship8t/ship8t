@@ -60,7 +60,7 @@ func (list *fileList) UnmarshalJSON(data []byte) error {
 	}
 	for decoder.More() {
 		if len(list.files) >= list.maxFiles {
-			return fmt.Errorf("%w: more than the limit of %d files per deployment", ErrLimitExceeded, list.maxFiles)
+			return errTooManyFiles(list.maxFiles)
 		}
 		var raw json.RawMessage
 		if err := decoder.Decode(&raw); err != nil {

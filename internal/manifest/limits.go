@@ -29,8 +29,13 @@ func DefaultLimits() Limits {
 	}
 }
 
+// errTooManyFiles reports a manifest with more files than the limit allows.
+func errTooManyFiles(limit int) error {
+	return fmt.Errorf("%w: more than the limit of %d files per deployment", ErrLimitExceeded, limit)
+}
+
 // checkLimits reports the first file size limit that manifest goes over,
-// naming it in the error. Decode has already enforced MaxFiles while reading.
+// naming it in the error. Validate checks MaxFiles before it calls this.
 func (manifest *Manifest) checkLimits(limits Limits) error {
 	var totalSize int64
 	for index, file := range manifest.Files {
