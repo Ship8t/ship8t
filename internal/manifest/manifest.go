@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/ship8t/ship8t/internal/strictjson"
 )
 
 // supportedVersion is the only manifest_version this package accepts.
@@ -49,11 +51,11 @@ type manifestBody struct {
 // manifest_version, files, and serve. The caller sets the file limit on Files
 // before decoding.
 func (body *manifestBody) UnmarshalJSON(data []byte) error {
-	fields, err := decodeStrictObject(data, "manifest_version", "files", "serve")
+	fields, err := strictjson.DecodeObject(data, "manifest_version", "files", "serve")
 	if err != nil {
 		return err
 	}
-	if err := unmarshalField(fields, "manifest_version", &body.ManifestVersion); err != nil {
+	if err := strictjson.UnmarshalField(fields, "manifest_version", &body.ManifestVersion); err != nil {
 		return err
 	}
 	if raw, found := fields["files"]; found {
@@ -73,11 +75,11 @@ func (body *manifestBody) UnmarshalJSON(data []byte) error {
 // spa_fallback.
 func decodeServe(data []byte) (Serve, error) {
 	var serve Serve
-	fields, err := decodeStrictObject(data, "spa_fallback")
+	fields, err := strictjson.DecodeObject(data, "spa_fallback")
 	if err != nil {
 		return serve, err
 	}
-	return serve, unmarshalField(fields, "spa_fallback", &serve.SPAFallback)
+	return serve, strictjson.UnmarshalField(fields, "spa_fallback", &serve.SPAFallback)
 }
 
 // Decode reads one manifest from reader and validates it against the manifest

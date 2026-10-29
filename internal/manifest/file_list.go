@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/ship8t/ship8t/internal/strictjson"
 )
 
 // fileBody is the JSON form of a File. Size is a pointer, so a missing or null
@@ -19,17 +21,17 @@ type fileBody struct {
 // path, size, and sha256.
 func decodeFileBody(data []byte) (fileBody, error) {
 	var entry fileBody
-	fields, err := decodeStrictObject(data, "path", "size", "sha256")
+	fields, err := strictjson.DecodeObject(data, "path", "size", "sha256")
 	if err != nil {
 		return entry, err
 	}
-	if err := unmarshalField(fields, "path", &entry.Path); err != nil {
+	if err := strictjson.UnmarshalField(fields, "path", &entry.Path); err != nil {
 		return entry, err
 	}
-	if err := unmarshalField(fields, "size", &entry.Size); err != nil {
+	if err := strictjson.UnmarshalField(fields, "size", &entry.Size); err != nil {
 		return entry, err
 	}
-	if err := unmarshalField(fields, "sha256", &entry.SHA256); err != nil {
+	if err := strictjson.UnmarshalField(fields, "sha256", &entry.SHA256); err != nil {
 		return entry, err
 	}
 	return entry, nil

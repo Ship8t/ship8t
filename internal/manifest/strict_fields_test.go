@@ -148,30 +148,6 @@ func TestDecodeAcceptsAnEmptyServeObject(t *testing.T) {
 	}
 }
 
-func TestDecodeStrictObjectRejectsMalformedJSON(t *testing.T) {
-	tests := []struct {
-		name string
-		data string
-	}{
-		{"empty input", ``},
-		{"open brace only", `{`},
-		{"key without a value", `{"path"`},
-		{"key with a colon only", `{"path":`},
-		{"value without a closing brace", `{"path":"a"`},
-		{"array", `[]`},
-		{"null", `null`},
-		{"number", `5`},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if _, err := decodeStrictObject([]byte(test.data), "path"); err == nil {
-				t.Fatalf("decodeStrictObject(%q) = nil error, want an error", test.data)
-			}
-		})
-	}
-}
-
 func TestFileListRejectsMalformedJSON(t *testing.T) {
 	tests := []struct {
 		name string

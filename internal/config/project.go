@@ -10,6 +10,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/ship8t/ship8t/internal/strictjson"
 )
 
 const (
@@ -65,11 +67,11 @@ func DecodeProjectFile(reader io.Reader) (ProjectFile, error) {
 
 // decodeProjectFields decodes and validates the fields of the file body.
 func decodeProjectFields(body []byte) (ProjectFile, error) {
-	fields, err := decodeStrictObject(body, "project", "directory", "ignore", "include", "serve")
+	fields, err := strictjson.DecodeObject(body, "project", "directory", "ignore", "include", "serve")
 	if err != nil {
-		var unknown *unknownFieldError
+		var unknown *strictjson.UnknownFieldError
 		// Explain a token, because the file belongs in version control.
-		if errors.As(err, &unknown) && strings.EqualFold(unknown.name, "token") {
+		if errors.As(err, &unknown) && strings.EqualFold(unknown.Name, "token") {
 			return ProjectFile{}, errors.New("token is not allowed, because the file belongs in version control, set the SHIP8T_TOKEN environment variable instead")
 		}
 		return ProjectFile{}, err
@@ -139,10 +141,10 @@ func decodeServe(fields map[string]json.RawMessage) (Serve, error) {
 	if !found {
 		return serve, nil
 	}
-	if isNull(raw) {
+	if strictjson.IsNull(raw) {
 		return serve, errors.New("serve must not be null, remove the field to use the default")
 	}
-	serveFields, err := decodeStrictObject(raw, "spa_fallback")
+	serveFields, err := strictjson.DecodeObject(raw, "spa_fallback")
 	if err != nil {
 		return serve, fmt.Errorf("serve: %w", err)
 	}
@@ -204,4 +206,14 @@ func validateDirectory(directory string) error {
 		return fmt.Errorf("directory %.64q must be a clean relative path, such as dist or build/public", directory)
 	}
 	return nil
+}
+
+// decodeField decodes the field called name into target when the object has it,
+// and names the field in the error. Unlike the standard decoder, it rejects
+// null, which would otherwise pass as an empty value.
+func decodeField(fields map[string]json.RawMessage, name string, target any) error {
+	if raw, found := fields[name]; found && strictjson.IsNull(raw) {
+		return fmt.Errorf("%s must not be null, remove the field to use the default", name)
+	}
+	return strictjson.UnmarshalField(fields, name, target)
 }
