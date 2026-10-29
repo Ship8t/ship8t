@@ -58,6 +58,10 @@ Only the following exists in the code today.
     content.
   - The patterns and the options come from the caller. Nothing reads
     `ship8t.json` yet.
+- `internal/e2e` holds the end-to-end test of deploying and rolling back. One of
+  its seven stages runs, and the other six skip until the code they need exists.
+  - The running stage scans a test site, describes its files, and decodes the
+    manifest as the server will.
 
 Deploying, rollback, the server, storage, authentication, and configuration
 files are not implemented. The commands described in the ADRs do not exist yet.
@@ -71,6 +75,7 @@ files are not implemented. The commands described in the ADRs do not exist yet.
   and the server.
 - `internal/scan` lists the files of a deploy directory, applies the ignore
   rules, detects secrets, and describes the files for a manifest.
+- `internal/e2e` holds the end-to-end test of the deploy and rollback flow.
 - `docs/adr` holds the architecture decision records.
 - `Makefile` holds the build, test, and analysis targets.
 - `.github/workflows` holds the GitHub Actions workflows for CI and CodeQL.
@@ -139,6 +144,11 @@ Partially implemented.
 - [ ] Per-command `--help`. Only top-level help exists.
 - [ ] Release automation. `make dist` exists, but publishing release assets with
   install instructions does not.
+- [ ] End-to-end test and the security test cases listed in ADR 0001. The
+  end-to-end test in `internal/e2e` runs one of seven stages. The scanner and
+  manifest cases have tests, covering traversal, symlinks, malformed and
+  oversized manifests, file counts, and secret detection. The server cases do
+  not.
 
 Not implemented.
 
@@ -152,5 +162,4 @@ Not implemented.
 - [ ] Client commands `deploy`, `deployments list`, `deployments inspect`,
   `rollback`, `config show`, `login`, and `logout`.
 - [ ] Server commands `serve`, `token create`, `token list`, and `token revoke`.
-- [ ] End-to-end test and the security test cases listed in ADR 0001.
 - [ ] Documentation of a local workflow that needs no paid service.
