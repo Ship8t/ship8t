@@ -155,6 +155,45 @@ func TestDecodeProjectFileAcceptsValidFiles(t *testing.T) {
 	}
 }
 
+func TestDecodeProjectFileReportsAReadError(t *testing.T) {
+	_, err := DecodeProjectFile(failingReader{})
+	if err == nil {
+		t.Fatal("DecodeProjectFile() = nil error, want an error")
+	}
+	for _, want := range []string{"read ship8t.json", "disk failure"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("DecodeProjectFile() error = %q, want it to contain %q", err, want)
+		}
+	}
+}
+
+func TestDecodeProjectFileNeverEchoesAnyPartOfAToken(t *testing.T) {
+	// The file belongs in version control, so a token in it is a mistake that
+	// must not reach a terminal, a log, or a bug report in any part.
+	templates := []string{
+		`{"token":"CANARY"}`,
+		`{"TOKEN":"CANARY"}`,
+		`{"Token":"CANARY CANARY"}`,
+		`{"project":"demo","token":"CANARY"}`,
+		`{"token":["CANARY"]}`,
+		`{"token":{"key":"CANARY"}}`,
+		`{"token":"` + strings.Repeat("a", 600) + `CANARY"}`,
+	}
+
+	for index, template := range templates {
+		body := strings.ReplaceAll(template, "CANARY", canary)
+		t.Run(strings.Join([]string{"case", string(rune('a' + index))}, " "), func(t *testing.T) {
+			_, err := DecodeProjectFile(strings.NewReader(body))
+			if err == nil {
+				t.Fatalf("DecodeProjectFile(%.80s) = nil error, want an error", body)
+			}
+			if piece := canaryPart(err.Error()); piece != "" {
+				t.Errorf("DecodeProjectFile(%.80s) error = %q, want it not to repeat any part of the token, but it holds %q", body, err, piece)
+			}
+		})
+	}
+}
+
 func TestDecodeProjectFileKeepsPatternsAsWritten(t *testing.T) {
 	// The scanner checks the pattern syntax, so the decoder passes every string
 	// on, including patterns that the scanner will reject.
