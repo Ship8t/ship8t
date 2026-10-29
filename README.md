@@ -56,15 +56,41 @@ Only the following exists in the code today.
   - `Describe` returns the size and the SHA-256 checksum of each file. It checks
     the paths and the limits with `manifest.Validate` before it reads any
     content.
-  - The patterns and the options come from the caller. Nothing reads
-    `ship8t.json` yet.
+  - The patterns and the options come from the caller. Nothing passes the
+    settings of `ship8t.json` to the scanner yet.
+- `internal/config` reads and validates the config files. No command uses it
+  yet.
+  - `DecodeProjectFile` reads a `ship8t.json` with `project`, `directory`,
+    `ignore`, `include`, and `serve.spa_fallback`. `LoadProjectFile` reads it
+    from a project directory through `os.Root`, treats a missing file as no
+    settings, and refuses a symlink or any other file that is not a regular
+    file.
+  - `project` must be a slug of lowercase letters, digits, and hyphens, 1 to 63
+    characters long. `directory` must be a clean relative path inside the
+    project directory, so a committed file cannot point a deploy elsewhere.
+  - A `token` key in `ship8t.json` is rejected, because the file belongs in
+    version control.
+  - `DecodeUserFile` reads the per-user config with `server` and `token`. The
+    server must be an `http` or `https` address with printable characters only
+    and no credentials, path, query, or fragment. The token must be 1 to 512
+    visible ASCII characters.
+  - Both decoders accept only exact field names, and reject repeated fields,
+    null values, and data after the object. The project decoder reads at most
+    64 KiB and the user decoder at most 16 KiB. No error repeats the server or
+    the token.
+  - Loading the user config, the permission check on it, the environment
+    variables, and the precedence between sources do not exist yet.
+- `internal/strictjson` decodes JSON objects for the manifest and the config
+  decoders. It rejects unknown fields, names with the wrong case, repeated
+  names, and data after the object.
 - `internal/e2e` holds the end-to-end test of deploying and rolling back. One of
   its seven stages runs, and the other six skip until the code they need exists.
   - The running stage scans a test site, describes its files, and decodes the
     manifest as the server will.
 
-Deploying, rollback, the server, storage, authentication, and configuration
-files are not implemented. The commands described in the ADRs do not exist yet.
+Deploying, rollback, the server, storage, and authentication are not
+implemented. No command reads a configuration file yet. The commands described
+in the ADRs do not exist yet.
 
 ## Project structure
 
@@ -75,6 +101,9 @@ files are not implemented. The commands described in the ADRs do not exist yet.
   and the server.
 - `internal/scan` lists the files of a deploy directory, applies the ignore
   rules, detects secrets, and describes the files for a manifest.
+- `internal/config` reads and validates the config files.
+- `internal/strictjson` decodes JSON objects strictly for the manifest and the
+  config files.
 - `internal/e2e` holds the end-to-end test of the deploy and rollback flow.
 - `docs/adr` holds the architecture decision records.
 - `Makefile` holds the build, test, and analysis targets.
@@ -149,11 +178,13 @@ Partially implemented.
   manifest cases have tests, covering traversal, symlinks, malformed and
   oversized manifests, file counts, and secret detection. The server cases do
   not.
+- [ ] Configuration files and precedence. `internal/config` decodes
+  `ship8t.json` and the user config, and loads `ship8t.json` from a directory.
+  Loading the user config, `ship8td.json`, the environment variables, and the
+  precedence between sources do not exist yet.
 
 Not implemented.
 
-- [ ] Configuration files and precedence (`ship8t.json`, user config,
-  `ship8td.json`, environment variables).
 - [ ] Storage, the deployment state machine, atomic activation, history, and
   crash recovery.
 - [ ] Retention and cleanup.
