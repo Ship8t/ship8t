@@ -3,6 +3,7 @@ package scan
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParsePatternRejectsInvalidPatterns(t *testing.T) {
@@ -164,6 +165,45 @@ func TestMatchesEntryOrParent(t *testing.T) {
 			}
 			if got := matchesEntryOrParent([]pattern{parsed}, test.path, test.isDir); got != test.want {
 				t.Errorf("pattern %q matchesEntryOrParent(%q, isDir=%v) = %v, want %v", test.pattern, test.path, test.isDir, got, test.want)
+			}
+		})
+	}
+}
+
+func TestPatternMatchesManyDoubleStarsQuickly(t *testing.T) {
+	tests := []struct {
+		name        string
+		doubleStars int
+		segments    int
+	}{
+		{"10 double stars and 30 segments", 10, 30},
+		{"30 double stars and 500 segments", 30, 500},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// The last segment of the path never matches, so the match has to rule
+			// out every way that the double stars can cover the segments.
+			text := strings.Repeat("**/", test.doubleStars) + "target"
+			missing := strings.Repeat("a/", test.segments-1) + "b"
+			found := strings.Repeat("a/", test.segments-1) + "target"
+			parsed, err := parsePattern(text)
+			if err != nil {
+				t.Fatalf("parsePattern(%q) error = %v", text, err)
+			}
+
+			start := time.Now()
+			if parsed.matches(missing, false) {
+				t.Errorf("pattern %q matches %q, want no match", text, missing)
+			}
+			if !parsed.matches(found, false) {
+				t.Errorf("pattern %q does not match %q, want a match", text, found)
+			}
+			// The limit is far above the time of a correct match, so a slow
+			// machine cannot fail the test, and a match that tries every split
+			// cannot pass it.
+			if elapsed := time.Since(start); elapsed > 2*time.Second {
+				t.Errorf("matching took %v, want under 2s", elapsed)
 			}
 		})
 	}
