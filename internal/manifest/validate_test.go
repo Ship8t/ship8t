@@ -118,3 +118,10 @@ func TestValidateReportsWhatDecodeReports(t *testing.T) {
 		})
 	}
 }
+
+func TestVersionIsTheVersionThatValidateAccepts(t *testing.T) {
+	manifest := &Manifest{ManifestVersion: Version, Files: filesWithPaths("index.html")}
+	if err := manifest.Validate(DefaultLimits()); err != nil {
+		t.Errorf("Validate() error = %v, want nil for a manifest of Version %d", err, Version)
+	}
+}

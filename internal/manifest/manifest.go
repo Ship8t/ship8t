@@ -10,6 +10,10 @@ import (
 // supportedVersion is the only manifest_version this package accepts.
 const supportedVersion = 1
 
+// Version is the manifest_version that a client writes into a manifest it
+// builds.
+const Version = supportedVersion
+
 // ErrUnsupportedVersion marks a manifest whose manifest_version is missing or
 // not supported, so the server can answer with unsupported_manifest_version.
 var ErrUnsupportedVersion = errors.New("unsupported manifest version")
