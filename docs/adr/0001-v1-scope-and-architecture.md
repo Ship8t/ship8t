@@ -454,3 +454,15 @@ docs/adr/          architecture decisions
   in the error. Treat a missing `ship8t.json` as no settings, and refuse a
   symlink or any other file that is not a regular file, so the file is never
   read from somewhere else.
+- 2026-10-29. Clarified the user config in section 6 while building
+  `internal/config`, without changing a decision. Require `server` to be an
+  `http` or `https` address made of a scheme, a host, and an optional port, and
+  reject credentials, a path other than `/`, a query, a fragment, a port outside
+  1 to 65535, and any character that is not printable, so an invisible or
+  direction changing character cannot make one host look like another when the
+  client prints the server. Require `token` to be 1 to 512 visible ASCII
+  characters, because it goes into an HTTP header. Read at most 16 KiB, and
+  apply the same strict rules as for `ship8t.json`. Never repeat the server or
+  the token in an error, because either can hold a secret. Leave the rule on a
+  non-loopback `http://` address to the client transport, because it applies to
+  the address that the client dials.
