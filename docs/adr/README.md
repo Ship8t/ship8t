@@ -1,6 +1,7 @@
 # Architecture Decision Records
 
-This directory records the significant architectural decisions for Ship8t. Each ADR explains the context, the alternatives, the decision, and the consequences.
+This directory records the significant architectural decisions for Ship8t. Each
+ADR explains the context, the alternatives, the decision, and the consequences.
 
 ## Status vocabulary
 
@@ -11,7 +12,9 @@ This directory records the significant architectural decisions for Ship8t. Each 
 | Superseded | A later ADR replaced it, and the old ADR links to the new one. |
 | Deprecated | No longer relevant, with no replacement. |
 
-Never edit an accepted ADR silently. To change a decision, write a new ADR that supersedes the old one and update the old ADR's status to link to it. Record small clarifications in the ADR's history section.
+Never edit an accepted ADR silently. To change a decision, write a new ADR that
+supersedes the old one and update the old ADR's status to link to it. Record
+small clarifications in the ADR's history section.
 
 ## Index
 
@@ -25,7 +28,8 @@ Never edit an accepted ADR silently. To change a decision, write a new ADR that 
 
 ## Topics without an ADR yet
 
-Write an ADR for each of these when implementation shows that 0001 to 0004 are not enough.
+Write an ADR for each of these when implementation shows that 0001 to 0004 are
+not enough.
 
 - A detailed threat model. The v1 security boundaries live in 0001, section 10.
 - Remote authentication beyond static scoped tokens.
@@ -34,9 +38,12 @@ Write an ADR for each of these when implementation shows that 0001 to 0004 are n
 
 ## Writing a new ADR
 
-1. Copy [template.md](template.md) to `NNNN-short-title.md`, replacing `NNNN` with the next free four-digit number.
-2. Fill in the Status, Date, and Deciders lines and every section. Label options that are still undecided as proposed.
+1. Copy [template.md](template.md) to `NNNN-short-title.md`, replacing `NNNN`
+   with the next free four-digit number.
+2. Fill in the Status, Date, and Deciders lines and every section. Label options
+   that are still undecided as proposed.
 3. Open it as Proposed and add it to the index above.
 4. Mark it Accepted, with a date, only when the maintainer accepts it.
 
-Name each file after its subject in plain words, such as `0005-security-threat-model.md`.
+Name each file after its subject in plain words, such as
+`0005-security-threat-model.md`.
