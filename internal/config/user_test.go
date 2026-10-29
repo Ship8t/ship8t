@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -269,6 +270,90 @@ func TestDecodeUserFileLimitsAreExact(t *testing.T) {
 			_, err := DecodeUserFile(strings.NewReader(test.body))
 			if (err != nil) != test.wantErr {
 				t.Errorf("DecodeUserFile() error = %v, want an error: %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+// failingReader fails at the first read, as a file that cannot be read does.
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) {
+	return 0, errors.New("disk failure")
+}
+
+func TestDecodeUserFileReportsAReadError(t *testing.T) {
+	_, err := DecodeUserFile(failingReader{})
+	if err == nil {
+		t.Fatal("DecodeUserFile() = nil error, want an error")
+	}
+	for _, want := range []string{"read user config", "disk failure"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("DecodeUserFile() error = %q, want it to contain %q", err, want)
+		}
+	}
+}
+
+// canary is a value that no error message holds by chance. A test puts it where a
+// secret would be, and then looks for any part of it in the error.
+const canary = "Zq7Xk2Wm9"
+
+// canaryPart returns the first piece of four bytes of the canary that text
+// holds, or the empty string when it holds none.
+func canaryPart(text string) string {
+	for start := 0; start+4 <= len(canary); start++ {
+		if piece := canary[start : start+4]; strings.Contains(text, piece) {
+			return piece
+		}
+	}
+	return ""
+}
+
+func TestDecodeUserFileNeverEchoesAnyPartOfAValue(t *testing.T) {
+	// CANARY stands where a secret could be. A message that cuts the first few
+	// characters of a value, or repeats only its host, would still show a piece.
+	templates := []string{
+		`{"server":"https://alice:CANARY@example.com"}`,
+		`{"server":"ftp://alice:CANARY@example.com"}`,
+		`{"server":"https://alice:CANARY@example.com:99999"}`,
+		`{"server":"https://alice:CANARY@exa mple.com"}`,
+		`{"server":"https://alice:CANARY@example.com/v1"}`,
+		`{"server":"https://CANARY.example/CANARY"}`,
+		`{"server":"https://CANARY.example?key=CANARY"}`,
+		`{"server":"https://CANARY.example/#CANARY"}`,
+		`{"server":"https://CANARY.example:"}`,
+		`{"server":"https://CANARY.example:0"}`,
+		`{"server":"https://CANARY\t.example"}`,
+		`{"server":"https://:8481/CANARY"}`,
+		`{"server":"https://:CANARY"}`,
+		`{"server":"https:CANARY"}`,
+		`{"server":"https://CANARY.example:8481/CANARY?x=CANARY#CANARY"}`,
+		`{"server":"CANARY"}`,
+		`{"server":"CANARY://example.com"}`,
+		`{"server":["CANARY"]}`,
+		`{"server":{"key":"CANARY"}}`,
+		`{"server":"https://` + strings.Repeat("a", 2048) + `CANARY"}`,
+		`{"token":"CANARY CANARY"}`,
+		`{"token":"CANARY\tx"}`,
+		`{"token":"CANARYé"}`,
+		`{"token":["CANARY"]}`,
+		`{"token":{"key":"CANARY"}}`,
+		`{"token":"` + strings.Repeat("a", 600) + `CANARY"}`,
+		`{"server":"https://CANARY.example","token":"CANARY CANARY"}`,
+		`{"server":"ftp://CANARY.example","token":"CANARY"}`,
+		`{"token":"CANARY","token":"CANARY"}`,
+		`{"server":"CANARY","server":"CANARY"}`,
+	}
+
+	for index, template := range templates {
+		body := strings.ReplaceAll(template, "CANARY", canary)
+		t.Run(strings.Join([]string{"case", string(rune('a' + index))}, " "), func(t *testing.T) {
+			_, err := DecodeUserFile(strings.NewReader(body))
+			if err == nil {
+				t.Fatalf("DecodeUserFile(%.80s) = nil error, want an error", body)
+			}
+			if piece := canaryPart(err.Error()); piece != "" {
+				t.Errorf("DecodeUserFile(%.80s) error = %q, want it not to repeat any part of the value, but it holds %q", body, err, piece)
 			}
 		})
 	}
