@@ -115,23 +115,34 @@ func (p pattern) matches(path string, isDir bool) bool {
 }
 
 // matchSegments matches pattern segments against path segments. A segment of
-// ** matches zero or more path segments.
+// ** matches zero or more path segments. It retries from the last ** only, so
+// the time stays proportional to the product of the two lengths, however many
+// ** segments the pattern holds.
 func matchSegments(patternSegments, pathSegments []string) bool {
-	for len(patternSegments) > 0 {
-		if patternSegments[0] == "**" {
-			for skipped := 0; skipped <= len(pathSegments); skipped++ {
-				if matchSegments(patternSegments[1:], pathSegments[skipped:]) {
-					return true
-				}
-			}
+	patternIndex, pathIndex := 0, 0
+	// Remember the last **, so a failed match can retry with it covering one
+	// more path segment.
+	starIndex, starPathIndex := -1, 0
+	for pathIndex < len(pathSegments) {
+		switch {
+		case patternIndex < len(patternSegments) && patternSegments[patternIndex] == "**":
+			starIndex, starPathIndex = patternIndex, pathIndex
+			patternIndex++
+		case patternIndex < len(patternSegments) && matchSegment(patternSegments[patternIndex], pathSegments[pathIndex]):
+			patternIndex++
+			pathIndex++
+		case starIndex >= 0:
+			starPathIndex++
+			pathIndex = starPathIndex
+			patternIndex = starIndex + 1
+		default:
 			return false
 		}
-		if len(pathSegments) == 0 || !matchSegment(patternSegments[0], pathSegments[0]) {
-			return false
-		}
-		patternSegments, pathSegments = patternSegments[1:], pathSegments[1:]
 	}
-	return len(pathSegments) == 0
+	for patternIndex < len(patternSegments) && patternSegments[patternIndex] == "**" {
+		patternIndex++
+	}
+	return patternIndex == len(patternSegments)
 }
 
 // matchSegment matches one path segment against a pattern segment, where *

@@ -37,6 +37,10 @@ func patternSeeds() []patternSeed {
 		{"build/", "build", true},
 		{"build/", "build", false},
 		{"docs/**/", "docs/a", true},
+		{"**/**/a", "a", false},
+		{"a/**/**/b", "a/b", false},
+		{"**/a/**/b/**", "x/a/y/b/z", false},
+		{"**/**/**/a", "b/b/a/b", false},
 		{"assets/**", "other/a.js", false},
 		{"*", "a/b", false},
 		// Invalid patterns.
