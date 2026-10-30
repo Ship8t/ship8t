@@ -484,3 +484,9 @@ docs/adr/          architecture decisions
   directories. Refuse a symlinked `config.json`, so the token is never read from
   another file. The message for it says that the refusal is on purpose and
   suggests a link to the directory.
+- 2026-10-30. Clarified the command in the user config error of section 6,
+  without changing a decision. Write the suggested command as `chmod -- 600`
+  followed by the quoted path, so a relative path that starts with a dash is not
+  read as an option. Put the `--` before the mode and not after it, because BSD
+  `chmod` stops reading options at the mode and would take a later `--` for a
+  file name. The command is still the `chmod 600` that section 6 asks for.
