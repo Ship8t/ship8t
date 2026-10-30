@@ -181,12 +181,14 @@ func TestChmodCommand(t *testing.T) {
 		want   string
 		wantOK bool
 	}{
-		{"plain path", "/home/user/.config/ship8t/config.json", "chmod 600 '/home/user/.config/ship8t/config.json'", true},
-		{"space", "/home/my user/config.json", "chmod 600 '/home/my user/config.json'", true},
-		{"single quote", "/home/o'brien/config.json", `chmod 600 '/home/o'\''brien/config.json'`, true},
-		{"only a quote", "'", `chmod 600 ''\'''`, true},
-		{"shell syntax stays literal", "/a/$(id);`id`/*/b", "chmod 600 '/a/$(id);`id`/*/b'", true},
-		{"non-ascii letters", "/home/josé/config.json", "chmod 600 '/home/josé/config.json'", true},
+		{"plain path", "/home/user/.config/ship8t/config.json", "chmod -- 600 '/home/user/.config/ship8t/config.json'", true},
+		{"space", "/home/my user/config.json", "chmod -- 600 '/home/my user/config.json'", true},
+		{"single quote", "/home/o'brien/config.json", `chmod -- 600 '/home/o'\''brien/config.json'`, true},
+		{"only a quote", "'", `chmod -- 600 ''\'''`, true},
+		// A path that starts with a dash would read as an option without the --, and the -- must come before the mode on BSD.
+		{"relative path with a leading dash", "-v/config.json", "chmod -- 600 '-v/config.json'", true},
+		{"shell syntax stays literal", "/a/$(id);`id`/*/b", "chmod -- 600 '/a/$(id);`id`/*/b'", true},
+		{"non-ascii letters", "/home/josé/config.json", "chmod -- 600 '/home/josé/config.json'", true},
 		{"newline", "/a\nb/config.json", "", false},
 		{"carriage return", "/a\rb/config.json", "", false},
 		{"tab", "/a\tb/config.json", "", false},

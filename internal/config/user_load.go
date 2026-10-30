@@ -115,7 +115,9 @@ func chmodCommand(path string) (string, bool) {
 			return "", false
 		}
 	}
-	return "chmod 600 " + shellQuote(path), true
+	// Put -- before the mode, so a relative path that starts with a dash is not
+	// read as an option. BSD chmod stops reading options at the mode.
+	return "chmod -- 600 " + shellQuote(path), true
 }
 
 // shellQuote wraps text in single quotes for a POSIX shell. Inside single quotes

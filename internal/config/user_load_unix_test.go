@@ -44,7 +44,7 @@ func TestLoadUserFileRefusesAFileThatOthersCanAccess(t *testing.T) {
 			if err == nil {
 				t.Fatalf("LoadUserFile() = %+v, nil error, want an error for mode %04o", got, mode)
 			}
-			wantCommand := "chmod 600 '" + filepath.Join(directory, "config.json") + "'"
+			wantCommand := "chmod -- 600 '" + filepath.Join(directory, "config.json") + "'"
 			// Match the phrase and not the digits, because the temporary directory name
 			// already holds the mode text.
 			for _, want := range []string{fmt.Sprintf("mode %04o,", mode), wantCommand} {
@@ -127,10 +127,10 @@ func TestLoadUserFileKeepsTheErrorOnOneLine(t *testing.T) {
 			if strings.ContainsAny(message, "\n\r\x1b") {
 				t.Errorf("LoadUserFile() error = %q, want one line without raw control characters", message)
 			}
-			if got := strings.Contains(message, "chmod 600 '"); got != test.wantCommand {
+			if got := strings.Contains(message, "chmod -- 600 '"); got != test.wantCommand {
 				t.Errorf("LoadUserFile() error = %q, has a chmod command = %v, want %v", message, got, test.wantCommand)
 			}
-			if !strings.Contains(message, "chmod 600") {
+			if !test.wantCommand && !strings.Contains(message, "chmod 600") {
 				t.Errorf("LoadUserFile() error = %q, want it to name chmod 600", message)
 			}
 			if !test.wantCommand && !strings.Contains(message, `\x1b`) && !strings.Contains(message, `\n`) && !strings.Contains(message, `\r`) {
@@ -255,5 +255,32 @@ func TestChmodCommandRunsAsOneCommand(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(directory, "marker")); err == nil {
 		t.Error("a path ran an extra command, the quoting is unsafe")
+	}
+}
+
+func TestChmodCommandRunsOnAPathWithALeadingDash(t *testing.T) {
+	parent := t.TempDir()
+	if err := os.Mkdir(filepath.Join(parent, "-v"), 0o700); err != nil {
+		t.Fatalf("create directory: %v", err)
+	}
+	relative := filepath.Join("-v", "config.json")
+	writeUserFile(t, parent+"/-v", `{"token":"s3cret-value"}`, 0o644)
+
+	command, ok := chmodCommand(relative)
+	if !ok {
+		t.Fatalf("chmodCommand(%q) has no command, want one", relative)
+	}
+	// Run in the parent, so the relative path resolves as the user would see it.
+	shell := exec.Command("sh", "-c", command)
+	shell.Dir = parent
+	if output, err := shell.CombinedOutput(); err != nil {
+		t.Fatalf("sh -c %q failed: %v\n%s", command, err, output)
+	}
+	info, err := os.Stat(filepath.Join(parent, relative))
+	if err != nil {
+		t.Fatalf("stat %q: %v", relative, err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("mode of %q = %04o after the command, want 0600", relative, info.Mode().Perm())
 	}
 }
