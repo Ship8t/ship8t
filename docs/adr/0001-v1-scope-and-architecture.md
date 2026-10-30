@@ -466,3 +466,21 @@ docs/adr/          architecture decisions
   the token in an error, because either can hold a secret. Leave the rule on a
   non-loopback `http://` address to the client transport, because it applies to
   the address that the client dials.
+- 2026-10-30. Clarified the user config in section 6 while building
+  `internal/config`, without changing a decision. Load `config.json` from the
+  `ship8t` directory, so the file name is fixed and the caller resolves the
+  directory. Treat a missing directory or file as no settings, because a new
+  machine has neither. Treat an empty path as an error, because `os.OpenRoot`
+  reports it as a missing file and that would hide a caller that forgot to
+  resolve the directory. Check the type with `Lstat` before the open, because
+  opening a named pipe with no writer blocks, and check type and mode again on
+  the opened file before the first read. Refuse a mode with any bit of `0o077`
+  set before reading, so a file with a token that others can access is never
+  read. Put the `chmod 600` command in the error on one line, with the path in
+  single quotes and each quote written as `'\''`, which every common shell reads
+  the same way. Omit the command and show the quoted path when the path has a
+  control or unprintable character, so a path cannot forge a line or hide a
+  command. Follow a symlinked `ship8t` directory, because dotfile managers link
+  directories. Refuse a symlinked `config.json`, so the token is never read from
+  another file. The message for it says that the refusal is on purpose and
+  suggests a link to the directory.
