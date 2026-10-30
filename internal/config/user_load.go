@@ -17,13 +17,11 @@ const userFileName = "config.json"
 // users read, write, or run a file.
 const groupOtherAccess fs.FileMode = 0o077
 
-// LoadUserFile reads the config.json in directory and decodes it with
-// DecodeUserFile. The directory is the ship8t directory of the user, such as
-// ~/.config/ship8t, and not the file. A directory or a file that does not exist
-// gives the zero UserFile, because every setting is optional. It refuses a
-// symlink and any other file that is not a regular file, and it refuses a file
-// that group or other can access, before it reads a byte, because the file holds
-// a token.
+// LoadUserFile reads config.json in directory, the ship8t directory of the user
+// such as ~/.config/ship8t, and decodes it with DecodeUserFile. It gives the
+// zero UserFile when the directory or the file does not exist, and it refuses a
+// symlink, a file that is not regular, or a file that group or other can access
+// before it reads a byte.
 func LoadUserFile(directory string) (UserFile, error) {
 	// Reject an empty path first, because OpenRoot reports it as a missing file and
 	// the missing-directory rule below would hide a caller that forgot to resolve
