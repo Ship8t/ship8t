@@ -78,8 +78,17 @@ Only the following exists in the code today.
     null values, and data after the object. The project decoder reads at most
     64 KiB and the user decoder at most 16 KiB. No error repeats the server or
     the token.
-  - Loading the user config, the permission check on it, the environment
-    variables, and the precedence between sources do not exist yet.
+  - `LoadUserFile` reads `config.json` from the `ship8t` directory of the user,
+    such as `~/.config/ship8t`, through `os.Root`. A missing file or a missing
+    directory means no settings, and an empty path is an error. A symlinked
+    directory is followed.
+  - `LoadUserFile` refuses a symlinked `config.json` and any other file that is
+    not a regular file. It refuses a file that group or other can access before
+    it reads a byte, and it checks the opened file again. The error holds the
+    `chmod 600` command on one line. It omits the command and quotes the path
+    when the path has a control or unprintable character.
+  - Finding the `ship8t` directory, the environment variables, and the
+    precedence between sources do not exist yet.
 - `internal/strictjson` decodes JSON objects for the manifest and the config
   decoders. It rejects unknown fields, names with the wrong case, repeated
   names, and data after the object.
@@ -179,9 +188,10 @@ Partially implemented.
   oversized manifests, file counts, and secret detection. The server cases do
   not.
 - [ ] Configuration files and precedence. `internal/config` decodes
-  `ship8t.json` and the user config, and loads `ship8t.json` from a directory.
-  Loading the user config, `ship8td.json`, the environment variables, and the
-  precedence between sources do not exist yet.
+  `ship8t.json` and the user config, loads `ship8t.json` from a directory, and
+  loads the user config with a permission check. Finding the user config
+  directory, `ship8td.json`, the environment variables, and the precedence
+  between sources do not exist yet.
 
 Not implemented.
 
