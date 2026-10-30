@@ -284,3 +284,31 @@ func TestChmodCommandRunsOnAPathWithALeadingDash(t *testing.T) {
 		t.Errorf("mode of %q = %04o after the command, want 0600", relative, info.Mode().Perm())
 	}
 }
+
+func TestLoadUserFileNamesTheFileThatTheSystemOpens(t *testing.T) {
+	// A ".." after a symlink leads to the parent of the link target, and a
+	// lexical clean would name another file in the suggested command.
+	base := t.TempDir()
+	target := filepath.Join(base, "real", "sub")
+	if err := os.MkdirAll(target, 0o700); err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(base, "home"), 0o700); err != nil {
+		t.Fatalf("create home: %v", err)
+	}
+	link := filepath.Join(base, "home", "link")
+	symlinkOrSkip(t, target, link)
+	writeUserFile(t, filepath.Join(base, "real"), `{"token":"s3cret-value"}`, 0o644)
+
+	// Join would clean the ".." away, so build the path as text.
+	directory := link + "/.."
+
+	_, err := LoadUserFile(directory)
+	if err == nil {
+		t.Fatal("LoadUserFile() = nil error, want an error for a shared file")
+	}
+	want := "chmod -- 600 '" + directory + "/config.json'"
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("LoadUserFile() error = %q, want it to contain %q", err, want)
+	}
+}
