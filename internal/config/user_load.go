@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 	"unicode"
 )
@@ -42,8 +41,6 @@ func LoadUserFile(directory string) (UserFile, error) {
 	}
 	defer root.Close()
 
-	path := filepath.Join(directory, userFileName)
-
 	// Check the type before the open, because opening a named pipe with no writer
 	// blocks for ever.
 	info, err := root.Lstat(userFileName)
@@ -53,7 +50,7 @@ func LoadUserFile(directory string) (UserFile, error) {
 	if err != nil {
 		return UserFile{}, fmt.Errorf("read %s in user config directory %q: %w", userFileName, directory, withoutPath(err))
 	}
-	if err := checkUserFile(info, path); err != nil {
+	if err := checkUserFile(info, directory); err != nil {
 		return UserFile{}, err
 	}
 
@@ -69,7 +66,7 @@ func LoadUserFile(directory string) (UserFile, error) {
 	if err != nil {
 		return UserFile{}, fmt.Errorf("read %s in user config directory %q: %w", userFileName, directory, withoutPath(err))
 	}
-	if err := checkUserFile(openedInfo, path); err != nil {
+	if err := checkUserFile(openedInfo, directory); err != nil {
 		return UserFile{}, err
 	}
 
@@ -80,21 +77,25 @@ func LoadUserFile(directory string) (UserFile, error) {
 	return file, nil
 }
 
-// checkUserFile reports why the file at path must not be read, which is a type
-// other than a regular file or a mode that group or other can use.
-func checkUserFile(info fs.FileInfo, path string) error {
+// checkUserFile reports why the config file in directory must not be read, which
+// is a type other than a regular file or a mode that group or other can use.
+func checkUserFile(info fs.FileInfo, directory string) error {
 	// Name a symlink on its own, because the user may have linked the file on
 	// purpose and needs to know that the loader refuses it by design.
 	if info.Mode()&fs.ModeSymlink != 0 {
-		return fmt.Errorf("%s in user config directory %q is a symlink, and symlinks are refused on purpose so that the token is never read from another file, replace it with a regular file or link the whole ship8t directory instead", userFileName, filepath.Dir(path))
+		return fmt.Errorf("%s in user config directory %q is a symlink, and symlinks are refused on purpose so that the token is never read from another file, replace it with a regular file or link the whole ship8t directory instead", userFileName, directory)
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("%s in user config directory %q is not a regular file, replace it with a regular file", userFileName, filepath.Dir(path))
+		return fmt.Errorf("%s in user config directory %q is not a regular file, replace it with a regular file", userFileName, directory)
 	}
 	mode := info.Mode().Perm()
 	if mode&groupOtherAccess == 0 {
 		return nil
 	}
+
+	// Join as text and do not clean, because a ".." after a symlink leads
+	// somewhere else than the cleaned path does.
+	path := directory + string(os.PathSeparator) + userFileName
 
 	// Keep the message on one line, so a path cannot forge a second one.
 	if command, ok := chmodCommand(path); ok {
