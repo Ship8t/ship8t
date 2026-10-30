@@ -88,7 +88,7 @@ func checkUserFile(info fs.FileInfo, path string) error {
 	// Name a symlink on its own, because the user may have linked the file on
 	// purpose and needs to know that the loader refuses it by design.
 	if info.Mode()&fs.ModeSymlink != 0 {
-		return fmt.Errorf("%s in user config directory %q is a symlink, and symlinks are refused on purpose so that the token is never read from another file, replace it with a regular file", userFileName, filepath.Dir(path))
+		return fmt.Errorf("%s in user config directory %q is a symlink, and symlinks are refused on purpose so that the token is never read from another file, replace it with a regular file or link the whole ship8t directory instead", userFileName, filepath.Dir(path))
 	}
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("%s in user config directory %q is not a regular file, replace it with a regular file", userFileName, filepath.Dir(path))

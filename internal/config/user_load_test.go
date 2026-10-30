@@ -100,25 +100,25 @@ func TestLoadUserFileRefusesAnythingButARegularFile(t *testing.T) {
 	tests := []struct {
 		name      string
 		build     func(t *testing.T, directory string)
-		wantInErr string
+		wantInErr []string
 	}{
 		{"directory", func(t *testing.T, directory string) {
 			if err := os.Mkdir(filepath.Join(directory, "config.json"), 0o700); err != nil {
 				t.Fatalf("create directory: %v", err)
 			}
-		}, "not a regular file"},
+		}, []string{"not a regular file"}},
 		{"symlink to a file in the directory", func(t *testing.T, directory string) {
 			if err := os.WriteFile(filepath.Join(directory, "real.json"), []byte(`{"token":"real"}`), 0o600); err != nil {
 				t.Fatalf("write real.json: %v", err)
 			}
 			symlinkOrSkip(t, "real.json", filepath.Join(directory, "config.json"))
-		}, "refused on purpose"},
+		}, []string{"refused on purpose", "link the whole ship8t directory"}},
 		{"symlink to a file outside the directory", func(t *testing.T, directory string) {
 			symlinkOrSkip(t, filepath.Join(outside, "config.json"), filepath.Join(directory, "config.json"))
-		}, "refused on purpose"},
+		}, []string{"refused on purpose", "link the whole ship8t directory"}},
 		{"dangling symlink", func(t *testing.T, directory string) {
 			symlinkOrSkip(t, "missing.json", filepath.Join(directory, "config.json"))
-		}, "refused on purpose"},
+		}, []string{"refused on purpose", "link the whole ship8t directory"}},
 	}
 
 	for _, test := range tests {
@@ -130,8 +130,10 @@ func TestLoadUserFileRefusesAnythingButARegularFile(t *testing.T) {
 			if err == nil {
 				t.Fatalf("LoadUserFile() = %+v, nil error, want an error", got)
 			}
-			if !strings.Contains(err.Error(), test.wantInErr) {
-				t.Errorf("LoadUserFile() error = %q, want it to contain %q", err, test.wantInErr)
+			for _, want := range test.wantInErr {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("LoadUserFile() error = %q, want it to contain %q", err, want)
+				}
 			}
 			if got != (UserFile{}) {
 				t.Errorf("LoadUserFile() = %+v, want the zero value with an error", got)
