@@ -229,11 +229,20 @@ func TestChmodCommandRunsAsOneCommand(t *testing.T) {
 		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 			t.Fatalf("write %q: %v", name, err)
 		}
+		// Set the mode after the write, so a restrictive umask cannot make the final
+		// mode check pass before the command runs.
+		if err := os.Chmod(path, 0o644); err != nil {
+			t.Fatalf("set the mode of %q: %v", name, err)
+		}
 		command, ok := chmodCommand(path)
 		if !ok {
 			t.Fatalf("chmodCommand(%q) has no command, want one", path)
 		}
-		if output, err := exec.Command("sh", "-c", command).CombinedOutput(); err != nil {
+		// Run in the temporary directory, where an extra command would leave its
+		// marker for the check below.
+		shell := exec.Command("sh", "-c", command)
+		shell.Dir = directory
+		if output, err := shell.CombinedOutput(); err != nil {
 			t.Fatalf("sh -c %q failed: %v\n%s", command, err, output)
 		}
 		info, err := os.Stat(path)
