@@ -66,12 +66,12 @@ func TestLoadUserFileRefusesAFileThatOthersCanAccess(t *testing.T) {
 
 func TestLoadUserFileFollowsASymlinkedDirectory(t *testing.T) {
 	// Dotfile managers link the whole ship8t directory, so the loader follows it.
-	real := t.TempDir()
+	target := t.TempDir()
 	link := filepath.Join(t.TempDir(), "ship8t")
-	symlinkOrSkip(t, real, link)
+	symlinkOrSkip(t, target, link)
 
 	t.Run("owner only file", func(t *testing.T) {
-		writeUserFile(t, real, `{"token":"s3cret-value"}`, 0o600)
+		writeUserFile(t, target, `{"token":"s3cret-value"}`, 0o600)
 
 		got, err := LoadUserFile(link)
 		if err != nil {
@@ -84,7 +84,7 @@ func TestLoadUserFileFollowsASymlinkedDirectory(t *testing.T) {
 
 	t.Run("shared file", func(t *testing.T) {
 		// The mode check must see the real file behind the link.
-		writeUserFile(t, real, `{"token":"s3cret-value"}`, 0o644)
+		writeUserFile(t, target, `{"token":"s3cret-value"}`, 0o644)
 
 		_, err := LoadUserFile(link)
 		if err == nil {
@@ -264,7 +264,7 @@ func TestChmodCommandRunsOnAPathWithALeadingDash(t *testing.T) {
 		t.Fatalf("create directory: %v", err)
 	}
 	relative := filepath.Join("-v", "config.json")
-	writeUserFile(t, parent+"/-v", `{"token":"s3cret-value"}`, 0o644)
+	writeUserFile(t, filepath.Join(parent, "-v"), `{"token":"s3cret-value"}`, 0o644)
 
 	command, ok := chmodCommand(relative)
 	if !ok {
