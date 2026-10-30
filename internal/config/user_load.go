@@ -32,9 +32,9 @@ func LoadUserFile(directory string) (UserFile, error) {
 		return UserFile{}, errors.New("user config directory is empty, pass the ship8t directory such as ~/.config/ship8t")
 	}
 
-	// Unlike a project directory, the ship8t directory is created by the user, so
-	// a missing one is the normal state of a new machine. Treat only "does not
-	// exist" that way, and report any other failure.
+	// Treat a missing directory as no settings, unlike a project directory,
+	// because the user creates the ship8t directory and a new machine has none.
+	// Report any other failure.
 	root, err := os.OpenRoot(directory)
 	if errors.Is(err, fs.ErrNotExist) {
 		return UserFile{}, nil
