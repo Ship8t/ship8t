@@ -187,25 +187,27 @@ SQLite transactions are atomic.
 - 2026-10-26. Renumbered from 0002 to 0003 and reworded before any
   implementation. Added API tokens to the database's responsibilities and the
   explicit data directory requirement. No other decision changed.
-- 2026-10-31. Renamed `trash/` to `pruning/` and clarified crash recovery
-  after an interrupted prune, without changing a decision. The layout, the
-  recovery table, and retention and cleanup use the new name. No storage code
-  exists yet, so no data or code used the old name. The new name says what the
-  directory holds, as `staging/` does for uploads, and it matches the `pruned`
-  state. Name each entry `pruning/<project-id>/<deployment-id>`, so the path
-  alone identifies the project and the release, and never restore a release
-  from it. Keep `pruning/` on the same filesystem as `releases/`, so moving a
-  release into it is an atomic rename. Prune moves a release to `pruning/`,
-  marks it `pruned`, then deletes it, so a crash after the move and before the
-  mark leaves a `ready` deployment whose directory sits in `pruning/`. Do not
-  read that directory as missing. Check `pruning/` before the row for a missing
-  directory, and when the entry belongs to a `ready` deployment that is not the
-  active release, finish the prune. Mark the deployment `pruned` in one
-  transaction and then delete the entry, so a crash between the two steps
-  leaves the leftover that the `pruning/` row already finishes. Retention chose
-  that release, so finishing is the outcome that the crash interrupted, and
-  restoring the directory would undo a decision that was already made. Never
-  finish a prune for the active release, because retention never prunes it.
+- 2026-10-31. Renamed `trash/` to `pruning/` and settled crash recovery after
+  an interrupted prune, which this ADR left open. No other decision changed.
+  The layout, the recovery table, and retention and cleanup use the new name.
+  No storage code exists yet, so no data or code used the old name. The new name
+  says what the directory holds, as `staging/` does for uploads, and it matches
+  the `pruned` state. Name each entry `pruning/<project-id>/<deployment-id>`, so
+  the path alone identifies the project and the release, and never restore a
+  release from it. Keep `pruning/` on the same filesystem as `releases/`, so
+  moving a release into it is an atomic rename. Prune moves a release to
+  `pruning/`, marks it `pruned`, then deletes it, so a crash after the move and
+  before the mark leaves a `ready` deployment whose directory sits in
+  `pruning/`. Do not read that directory as missing. Check each entry of
+  `pruning/` against the database before the row for a missing directory and
+  before the row for leftover entries. When the entry belongs to a `ready`
+  deployment that is not the active release, finish the prune. Mark the
+  deployment `pruned` in one transaction and then delete the entry, so a crash
+  between the two steps leaves the leftover that the `pruning/` row already
+  finishes. Retention chose that release, so finishing is the outcome that the
+  crash interrupted, and restoring the directory would undo a decision that was
+  already made. Never finish a prune for the active release, because retention
+  never prunes it, and do not apply the row for leftover entries to it either.
   Treat an active release whose directory sits in `pruning/` as a missing
   directory, which means log an error, mark the project degraded, and repair
   nothing.
