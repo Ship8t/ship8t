@@ -105,8 +105,11 @@ Only the following exists in the code today.
     `--project` values with the same rules as the files, and the error names
     the flag. A setting that no source gives stays empty, because each command
     reports the settings it needs.
-  - None of these helpers is exported, and no command calls them. The source of
-    each resolved value is not kept yet.
+  - Each resolved setting keeps the kind of source that gave it, which is the
+    flag, the environment, `ship8t.json`, or the user config. A setting that no
+    source gives has no source. The token is kept as it is, so a caller must
+    mask it before it prints a setting.
+  - None of these helpers is exported, and no command calls them.
 - `internal/strictjson` decodes JSON objects for the manifest and the config
   decoders. It rejects unknown fields, names with the wrong case, repeated
   names, and data after the object.
@@ -209,8 +212,9 @@ Partially implemented.
   `ship8t.json` and the user config, loads `ship8t.json` from a directory, and
   loads the user config with a permission check. Internal helpers find the user
   config directory, validate the environment variables, and apply the
-  precedence between sources, and no command calls them. `ship8td.json` and the
-  source of each resolved value do not exist yet.
+  precedence between sources while keeping the source of each value, and no
+  command calls them. `ship8td.json` and passing the project settings to the
+  scanner do not exist yet.
 
 Not implemented.
 

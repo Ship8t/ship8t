@@ -520,3 +520,13 @@ docs/adr/          architecture decisions
   6 names no built-in default for these three and each command reports the
   settings it needs. Keep the source of each value for `ship8t config show` in a
   later step.
+- 2026-10-31. Clarified the sources of section 6 and the output of
+  `ship8t config show` in section 5 while building `internal/config`, without
+  changing a decision. Keep the source of each resolved setting as a kind,
+  which is the flag, the environment, `ship8t.json`, or the user config, and
+  leave the source empty when no source gives the setting. Do not store the
+  flag name, the variable name, or the file path in the source, because the
+  command can derive the name from the setting and the kind and already knows
+  the directories it read. Keep the token intact in the resolved settings,
+  because the `deploy` command sends it. Mask it where the command prints it,
+  as section 5 requires, and never print the resolved settings as they are.
