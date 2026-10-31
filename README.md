@@ -87,8 +87,16 @@ Only the following exists in the code today.
     it reads a byte, and it checks the opened file again. The error holds the
     `chmod 600` command on one line. It omits the command and quotes the path
     when the path has a control or unprintable character.
-  - Finding the `ship8t` directory, the environment variables, and the
-    precedence between sources do not exist yet.
+  - The package finds the `ship8t` directory. It uses `XDG_CONFIG_HOME` when
+    that is an absolute path and `~/.config` otherwise, so it ignores a relative
+    `XDG_CONFIG_HOME`. It fails and names `XDG_CONFIG_HOME` and `HOME` when it
+    has no absolute base, and it never guesses a directory.
+  - The package validates `SHIP8T_SERVER`, `SHIP8T_TOKEN`, and `SHIP8T_PROJECT`
+    with the same rules as the config files. An empty variable counts as unset
+    and no value is trimmed. An error names the variable and never repeats the
+    server or the token.
+  - Neither helper is exported, and no command calls them. The precedence
+    between sources does not exist yet.
 - `internal/strictjson` decodes JSON objects for the manifest and the config
   decoders. It rejects unknown fields, names with the wrong case, repeated
   names, and data after the object.
@@ -189,9 +197,10 @@ Partially implemented.
   not.
 - [ ] Configuration files and precedence. `internal/config` decodes
   `ship8t.json` and the user config, loads `ship8t.json` from a directory, and
-  loads the user config with a permission check. Finding the user config
-  directory, `ship8td.json`, the environment variables, and the precedence
-  between sources do not exist yet.
+  loads the user config with a permission check. Internal helpers find the user
+  config directory and validate the environment variables, and no command calls
+  them. `ship8td.json`, the precedence between sources, and the source of each
+  value do not exist yet.
 
 Not implemented.
 
