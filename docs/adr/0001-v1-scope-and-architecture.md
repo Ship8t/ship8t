@@ -506,3 +506,17 @@ docs/adr/          architecture decisions
   value, so a stray space is rejected and not hidden. Name the variable in each
   error and never repeat the server or the token. The order of the sources in
   section 6 is unchanged, and its application is a later step.
+- 2026-10-31. Clarified the order of the sources in section 6 while building
+  `internal/config`, without changing a decision. Apply the order to each
+  setting and use only the sources that can hold it. The server comes from the
+  `--server` flag, the environment, and the user config. The token comes from
+  the environment and the user config, because no flag carries it and
+  `ship8t.json` rejects it. The project comes from the `--project` flag, the
+  environment, and `ship8t.json`, because the user config does not hold it.
+  Count an empty flag or an empty variable as not given, so it falls through to
+  the next source. Validate the flag values with the same rules as the files and
+  name the flag in the error, because the flag wins and reaches the dialer.
+  Leave a setting empty when no source gives it and do not fail, because section
+  6 names no built-in default for these three and each command reports the
+  settings it needs. Keep the source of each value for `ship8t config show` in a
+  later step.

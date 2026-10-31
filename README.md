@@ -95,8 +95,18 @@ Only the following exists in the code today.
     with the same rules as the config files. An empty variable counts as unset
     and no value is trimmed. An error names the variable and never repeats the
     server or the token.
-  - Neither helper is exported, and no command calls them. The precedence
-    between sources does not exist yet.
+  - The package picks the server, the token, and the project from the sources
+    in the order of ADR 0001. A flag comes first, then the environment, then
+    `ship8t.json`, then the user config. Each setting uses only the sources
+    that can hold it. The server takes the flag, the environment, and the user
+    config. The token takes the environment and the user config. The project
+    takes the flag, the environment, and `ship8t.json`.
+  - An empty flag counts as not given. The package validates the `--server` and
+    `--project` values with the same rules as the files, and the error names
+    the flag. A setting that no source gives stays empty, because each command
+    reports the settings it needs.
+  - None of these helpers is exported, and no command calls them. The source of
+    each resolved value is not kept yet.
 - `internal/strictjson` decodes JSON objects for the manifest and the config
   decoders. It rejects unknown fields, names with the wrong case, repeated
   names, and data after the object.
@@ -198,9 +208,9 @@ Partially implemented.
 - [ ] Configuration files and precedence. `internal/config` decodes
   `ship8t.json` and the user config, loads `ship8t.json` from a directory, and
   loads the user config with a permission check. Internal helpers find the user
-  config directory and validate the environment variables, and no command calls
-  them. `ship8td.json`, the precedence between sources, and the source of each
-  value do not exist yet.
+  config directory, validate the environment variables, and apply the
+  precedence between sources, and no command calls them. `ship8td.json` and the
+  source of each resolved value do not exist yet.
 
 Not implemented.
 
