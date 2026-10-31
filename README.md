@@ -134,8 +134,8 @@ Only the following exists in the code today.
   - `TestRecoveryAfterInterruption` lists nine cases from ADR 0003. They are a
     crash before the `ready` commit, the staging directories of dead and live
     deployments, an unknown release directory, a missing release directory,
-    leftover trash entries, a crash during activation, and two interruptions of
-    a prune.
+    leftover pruning entries, a crash during activation, and two
+    interruptions of a prune.
   - `TestConcurrentActivation` lists five races between activation operations
     of one project. `TestPruneRefusesActiveRelease` lists two attempts to prune
     the active release.
