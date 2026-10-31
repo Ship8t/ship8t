@@ -150,3 +150,14 @@ the client uploads the rest and calls `finalize` again.
 - 2026-10-26. Accepted, together with ADRs 0001, 0003, and 0004.
 - 2026-10-26. Renumbered from 0001 to 0002 and reworded before any
   implementation. No decision changed.
+- 2026-10-31. Clarified the repeat rule in the allowed transitions while
+  building `internal/deployment`, without changing a decision. Read the rule
+  that a request which would produce the current state is a successful no-op as
+  a general rule, so a move from any of the seven states to itself succeeds and
+  changes nothing. The two examples in the text, `finalize` on `ready` and
+  `cancel` on `cancelled`, stay as examples. Reject a repeat of a name that is
+  not one of the seven states, so a state read wrongly from storage never
+  passes as a no-op, and compare state names with exact letter case. Keep the
+  transition function pure. It checks the pair of states only, and the refusal
+  to prune the active release stays with the activation code that owns the
+  active pointer.
