@@ -47,7 +47,7 @@ func TestRecoveryAfterInterruption(t *testing.T) {
 		{
 			name:  "leftover entries in pruning",
 			needs: "recovery at startup",
-			check: "recovery finishes the removal and leaves the active release unchanged",
+			check: "recovery finishes the removal of each entry that is not the active release, and leaves the active release unchanged",
 		},
 		{
 			name:  "crash during activation",
