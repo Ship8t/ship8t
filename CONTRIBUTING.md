@@ -36,6 +36,34 @@ binaries into `bin/`.
 CodeQL also scans each pull request. Its findings are advisory and need a
 review.
 
+## Run the fuzz tests
+
+`make test` and CI run every fuzz target on its seed inputs and on any failing
+input saved under `testdata/fuzz`. They never search for new inputs. Run a
+target yourself to search.
+
+These targets exist.
+
+- `FuzzDecode` in `internal/manifest`.
+- `FuzzPatternMatches` and `FuzzMayMatchBelow` in `internal/scan`.
+- `FuzzDecodeProjectFile` and `FuzzDecodeUserFile` in `internal/config`.
+
+Run one target at a time, from the repository root. The `-fuzz` flag takes one
+package and a pattern that matches one target, so `./...` fails. Anchor the
+name, because `-fuzz=FuzzDecode` matches both config targets and fails there.
+
+```
+go test -run='^$' -fuzz='^FuzzDecode$' -fuzztime=30s ./internal/manifest
+```
+
+The run stops after the time you set and prints `PASS` when it finds nothing.
+Use `-fuzztime=1x` to check that a target starts.
+
+A failing run saves the input under `testdata/fuzz` in the package. Decide
+whether the code or the property of the test was wrong. Commit the saved input
+together with the fix when the code was wrong. Delete it when the property was
+wrong.
+
 ## Make a change
 
 - Keep each pull request to one logical change.
