@@ -88,11 +88,29 @@ func TestTransitionErrorNamesBothStates(t *testing.T) {
 func TestTransitionErrorCapsAnUnknownState(t *testing.T) {
 	long := State(strings.Repeat("x", 1000))
 
-	_, err := Transition(long, Ready)
-	if err == nil {
-		t.Fatal("Transition from an unknown state succeeded, want an error")
+	tests := []struct {
+		name string
+		from State
+		to   State
+	}{
+		{name: "long source state", from: long, to: Ready},
+		{name: "long target state", from: Ready, to: long},
+		{name: "long source and target state", from: long, to: long},
 	}
-	if len(err.Error()) > 200 {
-		t.Errorf("error is %d bytes long, want the unknown state capped", len(err.Error()))
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Transition(test.from, test.to)
+			if err == nil {
+				t.Fatalf("Transition(%.8q, %.8q) succeeded, want an error", test.from, test.to)
+			}
+
+			if !strings.Contains(err.Error(), strings.Repeat("x", 64)) {
+				t.Errorf("error %q does not keep the first 64 characters", err)
+			}
+			if strings.Contains(err.Error(), strings.Repeat("x", 65)) {
+				t.Errorf("error is %d bytes long, want the unknown state capped at 64 characters", len(err.Error()))
+			}
+		})
 	}
 }
