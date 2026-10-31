@@ -113,6 +113,17 @@ Only the following exists in the code today.
 - `internal/strictjson` decodes JSON objects for the manifest and the config
   decoders. It rejects unknown fields, names with the wrong case, repeated
   names, and data after the object.
+- `internal/deployment` defines the seven deployment states of ADR 0002 and
+  checks a move between two of them. No command or server code uses it yet.
+  - `Transition` allows the ten moves that the ADR lists, such as `created` to
+    `uploading` and `ready` to `pruned`. It rejects every other move with
+    `ErrStateConflict`, which the server will answer with `409 state_conflict`.
+    A terminal state never changes.
+  - A move from a known state to itself succeeds and changes nothing, so a
+    repeated request is safe. A repeat of an unknown state is rejected, and so
+    is a state name with the wrong letter case.
+  - It does not check whether a deployment is active. The activation code will
+    refuse to prune the active release.
 - `internal/e2e` holds the end-to-end test of deploying and rolling back. One of
   its seven stages runs, and the other six skip until the code they need exists.
   - The running stage loads the `ignore` and `include` rules from the
@@ -135,6 +146,8 @@ in the ADRs do not exist yet.
 - `internal/config` reads and validates the config files.
 - `internal/strictjson` decodes JSON objects strictly for the manifest and the
   config files.
+- `internal/deployment` defines the deployment states and checks the moves
+  between them.
 - `internal/e2e` holds the end-to-end test of the deploy and rollback flow.
 - `docs/adr` holds the architecture decision records.
 - `Makefile` holds the build, test, and analysis targets.
@@ -207,8 +220,8 @@ Partially implemented.
 - [ ] End-to-end test and the security test cases listed in ADR 0001. The
   end-to-end test in `internal/e2e` runs one of seven stages. The scanner and
   manifest cases have tests, covering traversal, symlinks, malformed and
-  oversized manifests, file counts, and secret detection. The server cases do
-  not.
+  oversized manifests, file counts, and secret detection. The state transition
+  table has a test for every pair of states. The server cases do not.
 - [ ] Configuration files and precedence. `internal/config` decodes
   `ship8t.json` and the user config, loads `ship8t.json` from a directory, and
   loads the user config with a permission check. Internal helpers find the user
@@ -216,11 +229,13 @@ Partially implemented.
   precedence between sources while keeping the source of each value, and no
   command calls them. `ship8td.json` and passing the project settings to the
   scanner do not exist yet.
+- [ ] Deployment state machine. `internal/deployment` checks a move between two
+  states, and nothing stores a state yet. Persisted states, activation, and
+  history do not exist yet.
 
 Not implemented.
 
-- [ ] Storage, the deployment state machine, atomic activation, history, and
-  crash recovery.
+- [ ] Storage, atomic activation, history, and crash recovery.
 - [ ] Retention and cleanup.
 - [ ] Server API with project-scoped bearer tokens and resource limits.
 - [ ] Local site serving with `<project>.localhost` routing.
