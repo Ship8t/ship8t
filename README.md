@@ -56,8 +56,8 @@ Only the following exists in the code today.
   - `Describe` returns the size and the SHA-256 checksum of each file. It checks
     the paths and the limits with `manifest.Validate` before it reads any
     content.
-  - The patterns and the options come from the caller. Nothing passes the
-    settings of `ship8t.json` to the scanner yet.
+  - The patterns and the options come from the caller. No command passes the
+    settings of `ship8t.json` to the scanner yet. The end-to-end test does.
 - `internal/config` reads and validates the config files. No command uses it
   yet.
   - `DecodeProjectFile` reads a `ship8t.json` with `project`, `directory`,
@@ -115,8 +115,9 @@ Only the following exists in the code today.
   names, and data after the object.
 - `internal/e2e` holds the end-to-end test of deploying and rolling back. One of
   its seven stages runs, and the other six skip until the code they need exists.
-  - The running stage scans a test site, describes its files, and decodes the
-    manifest as the server will.
+  - The running stage loads the `ignore` and `include` rules from the
+    `ship8t.json` of a test site and scans the site with them. It then
+    describes the files and decodes the manifest as the server will.
 
 Deploying, rollback, the server, storage, and authentication are not
 implemented. No command reads a configuration file yet. The commands described
