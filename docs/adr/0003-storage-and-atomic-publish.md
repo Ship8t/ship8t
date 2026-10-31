@@ -81,10 +81,10 @@ speed does not matter here. Choose `modernc.org/sqlite`.
       manifest.json                        copy of the accepted manifest
   quarantine/                              unexplained directories found
                                            during recovery
-  trash/                                   removals in progress
+  pruning/<project-id>/<deployment-id>/    releases being pruned
 ```
 
-Keep `staging/` and `releases/` of a project on the same filesystem, so renaming
+Keep `staging/`, `releases/`, and `pruning/` on the same filesystem, so renaming
 a directory between them is atomic. Make project IDs DNS-label slugs
 (`[a-z0-9-]`, 1 to 63 characters, no leading or trailing hyphen), validate them,
 and never build paths from raw user input. Generate deployment IDs in-house as
@@ -137,7 +137,7 @@ Reconcile the filesystem with the database at startup.
 | `staging/<id>` for a live deployment | Keep it so the client can resume. Idle expiry still applies. |
 | Directory in `releases/` with no database row | Move it to `quarantine/`. Never serve it and never delete it automatically. |
 | `ready` deployment whose directory is missing | Log an error and mark the project degraded. Never guess or repair. Report active-release problems loudly. |
-| Leftover entries in `trash/` | Finish removing them. |
+| Leftover entries in `pruning/` | Finish removing them. |
 
 A crash during activation leaves either the old pointer or the new one, because
 SQLite transactions are atomic.
@@ -146,9 +146,9 @@ SQLite transactions are atomic.
 
 - Keep the active release and the 10 most recent `ready` releases per project.
   Make the count configurable.
-- Prune by moving the release to `trash/`, marking it `pruned`, then deleting
-  it. Never prune the active release, and test the rejected attempt as a
-  security case.
+- Prune by moving the release to `pruning/<project-id>/<deployment-id>`, marking
+  it `pruned`, then deleting it. Never prune the active release, and test the
+  rejected attempt as a security case.
 - Expire incomplete deployments after one idle hour (configurable) and remove
   their staging directories.
 
@@ -187,3 +187,25 @@ SQLite transactions are atomic.
 - 2026-10-26. Renumbered from 0002 to 0003 and reworded before any
   implementation. Added API tokens to the database's responsibilities and the
   explicit data directory requirement. No other decision changed.
+- 2026-10-31. Renamed `trash/` to `pruning/` and clarified crash recovery
+  after an interrupted prune, without changing a decision. The layout, the
+  recovery table, and retention and cleanup use the new name. No storage code
+  exists yet, so no data or code used the old name. The new name says what the
+  directory holds, as `staging/` does for uploads, and it matches the `pruned`
+  state. Name each entry `pruning/<project-id>/<deployment-id>`, so the path
+  alone identifies the project and the release, and never restore a release
+  from it. Keep `pruning/` on the same filesystem as `releases/`, so moving a
+  release into it is an atomic rename. Prune moves a release to `pruning/`,
+  marks it `pruned`, then deletes it, so a crash after the move and before the
+  mark leaves a `ready` deployment whose directory sits in `pruning/`. Do not
+  read that directory as missing. Check `pruning/` before the row for a missing
+  directory, and when the entry belongs to a `ready` deployment that is not the
+  active release, finish the prune. Mark the deployment `pruned` in one
+  transaction and then delete the entry, so a crash between the two steps
+  leaves the leftover that the `pruning/` row already finishes. Retention chose
+  that release, so finishing is the outcome that the crash interrupted, and
+  restoring the directory would undo a decision that was already made. Never
+  finish a prune for the active release, because retention never prunes it.
+  Treat an active release whose directory sits in `pruning/` as a missing
+  directory, which means log an error, mark the project degraded, and repair
+  nothing.

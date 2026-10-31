@@ -39,7 +39,7 @@ func TestRecoveryAfterInterruption(t *testing.T) {
 			check: "recovery logs an error, marks the project degraded, repairs nothing, and leaves the active release unchanged",
 		},
 		{
-			name:  "leftover entries in trash",
+			name:  "leftover entries in pruning",
 			needs: "recovery at startup",
 			check: "recovery finishes the removal and leaves the active release unchanged",
 		},
@@ -49,14 +49,14 @@ func TestRecoveryAfterInterruption(t *testing.T) {
 			check: "the pointer names the old release or the new one, agrees with the activation log, and no request sees a mix",
 		},
 		{
-			name:  "prune interrupted after the move to trash and before the pruned mark",
+			name:  "prune interrupted after the move to pruning and before the pruned mark",
 			needs: "pruning with a failure injected after the move, and recovery at startup",
-			check: "recovery follows the rule that the maintainer sets, because ADR 0003 gives none for a ready deployment whose directory sits in trash, and the active release is unchanged",
+			check: "recovery marks the deployment pruned in one transaction and deletes its entry from pruning, and the active release is unchanged",
 		},
 		{
 			name:  "prune interrupted after the pruned mark and before the delete",
 			needs: "pruning with a failure injected after the mark, and recovery at startup",
-			check: "recovery finishes the removal from trash, the deployment stays pruned, and the active release is unchanged",
+			check: "recovery finishes the removal from pruning, the deployment stays pruned, and the active release is unchanged",
 		},
 	}
 
