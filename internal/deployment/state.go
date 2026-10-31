@@ -12,8 +12,9 @@ import (
 // never whether the deployment is active.
 type State string
 
-// These are the states of ADR 0002. Ready is the only state that has content a
-// release can serve, and Failed, Cancelled, Expired, and Pruned are terminal.
+// Created, Uploading, Ready, Failed, Cancelled, Expired, and Pruned are the
+// states of ADR 0002. Ready is the only state that has content a release can
+// serve, and Failed, Cancelled, Expired, and Pruned are terminal.
 const (
 	Created   State = "created"
 	Uploading State = "uploading"
