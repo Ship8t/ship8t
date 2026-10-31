@@ -490,3 +490,19 @@ docs/adr/          architecture decisions
   read as an option. Put the `--` before the mode and not after it, because BSD
   `chmod` stops reading options at the mode and would take a later `--` for a
   file name. The command is still the `chmod 600` that section 6 asks for.
+- 2026-10-31. Clarified how the client finds the user config and reads the
+  environment in section 6 while building `internal/config`, without changing a
+  decision. Find the `ship8t` directory in `$XDG_CONFIG_HOME` when that is an
+  absolute path, and in `~/.config` otherwise. Ignore a relative
+  `XDG_CONFIG_HOME`, because the XDG specification calls it invalid. Fail when
+  no absolute base exists, and name `XDG_CONFIG_HOME` and `HOME` in the error,
+  because a file that holds a token must never be read from a directory that
+  the user did not choose. Do not use `os.UserConfigDir`, because it returns
+  `~/Library/Application Support` on macOS and section 6 sets the default to
+  `~/.config/ship8t`. Join the path as text and do not clean it, so it names the
+  directory that the system opens. Check `SHIP8T_SERVER`, `SHIP8T_TOKEN`, and
+  `SHIP8T_PROJECT` with the same rules as the config files. Treat an empty
+  variable as unset, so it falls through to the next source, and do not trim a
+  value, so a stray space is rejected and not hidden. Name the variable in each
+  error and never repeat the server or the token. The order of the sources in
+  section 6 is unchanged, and its application is a later step.
