@@ -15,7 +15,7 @@ func TestResolveSettings(t *testing.T) {
 		user        UserFile
 		want        resolvedSettings
 	}{
-		{name: "no source gives empty settings"},
+		{name: "no source gives empty settings and no source"},
 		{
 			name:        "every source set, each setting takes the highest source that can give it",
 			flagServer:  "https://flag.example.com",
@@ -23,53 +23,57 @@ func TestResolveSettings(t *testing.T) {
 			environment: environmentSettings{Server: "https://env.example.com", Token: "env-token", Project: "env-project"},
 			project:     ProjectFile{Project: "file-project"},
 			user:        UserFile{Server: "https://user.example.com", Token: "user-token"},
-			want:        resolvedSettings{Server: "https://flag.example.com", Token: "env-token", Project: "flag-project"},
+			want: resolvedSettings{
+				Server:  resolvedSetting{"https://flag.example.com", sourceFlag},
+				Token:   resolvedSetting{"env-token", sourceEnvironment},
+				Project: resolvedSetting{"flag-project", sourceFlag},
+			},
 		},
 		{
 			name:        "server from the environment beats the user config",
 			environment: environmentSettings{Server: "https://env.example.com"},
 			user:        UserFile{Server: "https://user.example.com"},
-			want:        resolvedSettings{Server: "https://env.example.com"},
+			want:        resolvedSettings{Server: resolvedSetting{"https://env.example.com", sourceEnvironment}},
 		},
 		{
 			name:        "server from the flag beats the environment",
 			flagServer:  "https://flag.example.com",
 			environment: environmentSettings{Server: "https://env.example.com"},
-			want:        resolvedSettings{Server: "https://flag.example.com"},
+			want:        resolvedSettings{Server: resolvedSetting{"https://flag.example.com", sourceFlag}},
 		},
 		{
 			name: "server from the user config alone",
 			user: UserFile{Server: "https://user.example.com"},
-			want: resolvedSettings{Server: "https://user.example.com"},
+			want: resolvedSettings{Server: resolvedSetting{"https://user.example.com", sourceUserFile}},
 		},
 		{
 			name:        "token from the environment beats the user config",
 			environment: environmentSettings{Token: "env-token"},
 			user:        UserFile{Token: "user-token"},
-			want:        resolvedSettings{Token: "env-token"},
+			want:        resolvedSettings{Token: resolvedSetting{"env-token", sourceEnvironment}},
 		},
 		{
 			name: "token from the user config alone",
 			user: UserFile{Token: "user-token"},
-			want: resolvedSettings{Token: "user-token"},
+			want: resolvedSettings{Token: resolvedSetting{"user-token", sourceUserFile}},
 		},
 		{
 			name:        "project from the flag beats the environment and the file",
 			flagProject: "flag-project",
 			environment: environmentSettings{Project: "env-project"},
 			project:     ProjectFile{Project: "file-project"},
-			want:        resolvedSettings{Project: "flag-project"},
+			want:        resolvedSettings{Project: resolvedSetting{"flag-project", sourceFlag}},
 		},
 		{
 			name:        "project from the environment beats the file",
 			environment: environmentSettings{Project: "env-project"},
 			project:     ProjectFile{Project: "file-project"},
-			want:        resolvedSettings{Project: "env-project"},
+			want:        resolvedSettings{Project: resolvedSetting{"env-project", sourceEnvironment}},
 		},
 		{
 			name:    "project from the file alone",
 			project: ProjectFile{Project: "file-project"},
-			want:    resolvedSettings{Project: "file-project"},
+			want:    resolvedSettings{Project: resolvedSetting{"file-project", sourceProjectFile}},
 		},
 		{
 			name:        "an empty flag and an empty variable fall through",
@@ -78,7 +82,22 @@ func TestResolveSettings(t *testing.T) {
 			environment: environmentSettings{},
 			project:     ProjectFile{Project: "file-project"},
 			user:        UserFile{Server: "https://user.example.com", Token: "user-token"},
-			want:        resolvedSettings{Server: "https://user.example.com", Token: "user-token", Project: "file-project"},
+			want: resolvedSettings{
+				Server:  resolvedSetting{"https://user.example.com", sourceUserFile},
+				Token:   resolvedSetting{"user-token", sourceUserFile},
+				Project: resolvedSetting{"file-project", sourceProjectFile},
+			},
+		},
+		{
+			name:        "each setting names its own source when the sources differ",
+			flagServer:  "https://flag.example.com",
+			environment: environmentSettings{Project: "env-project"},
+			user:        UserFile{Token: "user-token"},
+			want: resolvedSettings{
+				Server:  resolvedSetting{"https://flag.example.com", sourceFlag},
+				Token:   resolvedSetting{"user-token", sourceUserFile},
+				Project: resolvedSetting{"env-project", sourceEnvironment},
+			},
 		},
 		{
 			name:    "other project file settings do not matter",
@@ -96,6 +115,21 @@ func TestResolveSettings(t *testing.T) {
 				t.Errorf("resolveSettings() = %+v, want %+v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestSettingSourcesAreDistinct(t *testing.T) {
+	sources := []settingSource{sourceFlag, sourceEnvironment, sourceProjectFile, sourceUserFile}
+	seen := make(map[settingSource]bool)
+	for _, source := range sources {
+		// The zero value means that no source gave the setting.
+		if source == "" {
+			t.Errorf("a source constant is empty, want a name that config show can print")
+		}
+		if seen[source] {
+			t.Errorf("source %q appears twice, want four different sources", source)
+		}
+		seen[source] = true
 	}
 }
 

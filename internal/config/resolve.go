@@ -1,11 +1,29 @@
 package config
 
-// resolvedSettings holds the server, token, and project that the sources give
-// after precedence. An empty field means that no source gave a value.
+// settingSource names the kind of source that gave a setting. The zero value
+// means that no source gave it.
+type settingSource string
+
+const (
+	sourceFlag        settingSource = "flag"
+	sourceEnvironment settingSource = "environment"
+	sourceProjectFile settingSource = "ship8t.json"
+	sourceUserFile    settingSource = "user config"
+)
+
+// resolvedSetting holds the value of one setting and the source that gave it.
+// Both are empty when no source gave the setting.
+type resolvedSetting struct {
+	Value  string
+	Source settingSource
+}
+
+// resolvedSettings holds the server, token, and project after precedence. The
+// token is a secret, so a caller must not print this struct as it is.
 type resolvedSettings struct {
-	Server  string
-	Token   string
-	Project string
+	Server  resolvedSetting
+	Token   resolvedSetting
+	Project resolvedSetting
 }
 
 // resolveSettings applies the precedence of ADR 0001, section 6 to the server,
@@ -26,18 +44,30 @@ func resolveSettings(flagServer, flagProject string, environment environmentSett
 	// server and no token, there is no token flag, and the user config has no
 	// project.
 	return resolvedSettings{
-		Server:  firstNonEmpty(flagServer, environment.Server, user.Server),
-		Token:   firstNonEmpty(environment.Token, user.Token),
-		Project: firstNonEmpty(flagProject, environment.Project, project.Project),
+		Server: firstSetting(
+			resolvedSetting{flagServer, sourceFlag},
+			resolvedSetting{environment.Server, sourceEnvironment},
+			resolvedSetting{user.Server, sourceUserFile},
+		),
+		Token: firstSetting(
+			resolvedSetting{environment.Token, sourceEnvironment},
+			resolvedSetting{user.Token, sourceUserFile},
+		),
+		Project: firstSetting(
+			resolvedSetting{flagProject, sourceFlag},
+			resolvedSetting{environment.Project, sourceEnvironment},
+			resolvedSetting{project.Project, sourceProjectFile},
+		),
 	}, nil
 }
 
-// firstNonEmpty returns the first value that is not empty, or the empty string.
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
+// firstSetting returns the first candidate that has a value, or the empty
+// setting when none has one.
+func firstSetting(candidates ...resolvedSetting) resolvedSetting {
+	for _, candidate := range candidates {
+		if candidate.Value != "" {
+			return candidate
 		}
 	}
-	return ""
+	return resolvedSetting{}
 }
