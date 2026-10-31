@@ -10,18 +10,22 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/ship8t/ship8t/internal/config"
 	"github.com/ship8t/ship8t/internal/manifest"
 	"github.com/ship8t/ship8t/internal/scan"
 )
 
 // firstVersion holds the files of the first version of the test site by
-// slash-separated path. The dot file and the config file must not reach the
-// manifest, because the default ignore rules skip them.
+// slash-separated path. The default ignore rules keep the finder file and the
+// config file out of the manifest. The ignore rule of the config file keeps the
+// source map out, and its include rule adds the dot file back.
 var firstVersion = map[string]string{
-	"index.html":    "<h1>version 1</h1>\n",
-	"assets/app.js": "console.log('version 1');\n",
-	".DS_Store":     "finder noise",
-	"ship8t.json":   `{"project":"demo"}`,
+	"index.html":        "<h1>version 1</h1>\n",
+	"assets/app.js":     "console.log('version 1');\n",
+	"assets/app.js.map": "source map",
+	".nojekyll":         "\n",
+	".DS_Store":         "finder noise",
+	"ship8t.json":       `{"project":"demo","ignore":["**/*.map"],"include":[".nojekyll"]}`,
 }
 
 // writeSite creates the files under a new directory and returns the directory.
@@ -59,7 +63,12 @@ func TestDeployAndRollback(t *testing.T) {
 	site := writeSite(t, firstVersion)
 
 	t.Run("scan the first version into a manifest", func(t *testing.T) {
-		files, err := scan.Scan(site, scan.Options{})
+		// Read the rules from ship8t.json as the deploy command will.
+		project, err := config.LoadProjectFile(site)
+		if err != nil {
+			t.Fatalf("LoadProjectFile() error = %v", err)
+		}
+		files, err := scan.Scan(site, scan.Options{Ignore: project.Ignore, Include: project.Include})
 		if err != nil {
 			t.Fatalf("Scan() error = %v", err)
 		}
@@ -80,6 +89,7 @@ func TestDeployAndRollback(t *testing.T) {
 		}
 
 		want := []manifest.File{
+			{Path: ".nojekyll", Size: int64(len(firstVersion[".nojekyll"])), SHA256: checksum(firstVersion[".nojekyll"])},
 			{Path: "assets/app.js", Size: int64(len(firstVersion["assets/app.js"])), SHA256: checksum(firstVersion["assets/app.js"])},
 			{Path: "index.html", Size: int64(len(firstVersion["index.html"])), SHA256: checksum(firstVersion["index.html"])},
 		}
