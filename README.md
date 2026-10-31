@@ -129,6 +129,17 @@ Only the following exists in the code today.
   - The running stage loads the `ignore` and `include` rules from the
     `ship8t.json` of a test site and scans the site with them. It then
     describes the files and decodes the manifest as the server will.
+- `internal/storage` holds tests and no other code yet. Every test skips until
+  the storage code exists, so none of them checks anything today.
+  - `TestRecoveryAfterInterruption` lists eight interruption points of ADR 0003.
+    They are a crash before the `ready` commit, leftover and unknown
+    directories, a missing release directory, a crash during activation, and
+    two interruptions of a prune.
+  - `TestConcurrentActivation` lists five races between activation operations
+    of one project. `TestPruneRefusesActiveRelease` lists two attempts to prune
+    the active release.
+  - Each case names the code it needs and the check to make once that code
+    exists.
 
 Deploying, rollback, the server, storage, and authentication are not
 implemented. No command reads a configuration file yet. The commands described
@@ -148,6 +159,8 @@ in the ADRs do not exist yet.
   config files.
 - `internal/deployment` defines the deployment states and checks the moves
   between them.
+- `internal/storage` will own the data directory of the server and holds only
+  skipped tests for recovery, concurrent activation, and pruning.
 - `internal/e2e` holds the end-to-end test of the deploy and rollback flow.
 - `docs/adr` holds the architecture decision records.
 - `Makefile` holds the build, test, and analysis targets.
@@ -221,7 +234,9 @@ Partially implemented.
   end-to-end test in `internal/e2e` runs one of seven stages. The scanner and
   manifest cases have tests, covering traversal, symlinks, malformed and
   oversized manifests, file counts, and secret detection. The state transition
-  table has a test for every pair of states. The server cases do not.
+  table has a test for every pair of states. The cases for recovery, concurrent
+  activation, and pruning the active release exist in `internal/storage` as
+  skipped placeholders. The other server cases do not exist.
 - [ ] Configuration files and precedence. `internal/config` decodes
   `ship8t.json` and the user config, loads `ship8t.json` from a directory, and
   loads the user config with a permission check. Internal helpers find the user
