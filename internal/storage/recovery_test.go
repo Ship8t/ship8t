@@ -2,10 +2,11 @@ package storage
 
 import "testing"
 
-// TestRecoveryAfterInterruption lists the rows of the recovery table of ADR 0003
-// and the interruptions of its activation and prune sequences. Turn on a case by
-// replacing its skip with an injected failure at that point, a restart, and the
-// check that the case names. Every case must also leave the active release
+// TestRecoveryAfterInterruption lists the rows of the recovery table of ADR
+// 0003, the interruptions of its activation and prune sequences, and the rule
+// of its history for an active release in the pruning directory. Turn on a case
+// by replacing its skip with an injected failure at that point, a restart, and
+// the check that the case names. Every case must also leave the active release
 // unchanged, except activation, which leaves the old release or the new one.
 func TestRecoveryAfterInterruption(t *testing.T) {
 	tests := []struct {
@@ -37,6 +38,11 @@ func TestRecoveryAfterInterruption(t *testing.T) {
 			name:  "ready deployment whose directory is missing",
 			needs: "recovery at startup and the degraded mark of a project",
 			check: "recovery logs an error, marks the project degraded, repairs nothing, and leaves the active release unchanged",
+		},
+		{
+			name:  "active release whose directory sits in pruning",
+			needs: "recovery at startup, the degraded mark of a project, and the active pointer",
+			check: "recovery finishes no prune, logs an error, marks the project degraded, repairs nothing, and leaves the active release unchanged",
 		},
 		{
 			name:  "leftover entries in pruning",

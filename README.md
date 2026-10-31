@@ -131,11 +131,11 @@ Only the following exists in the code today.
     describes the files and decodes the manifest as the server will.
 - `internal/storage` holds tests and no other code yet. Every test skips until
   the storage code exists, so none of them checks anything today.
-  - `TestRecoveryAfterInterruption` lists nine cases from ADR 0003. They are a
+  - `TestRecoveryAfterInterruption` lists ten cases from ADR 0003. They are a
     crash before the `ready` commit, the staging directories of dead and live
-    deployments, an unknown release directory, a missing release directory,
-    leftover pruning entries, a crash during activation, and two
-    interruptions of a prune.
+    deployments, an unknown release directory, a missing release directory, an
+    active release whose directory sits in `pruning/`, leftover pruning
+    entries, a crash during activation, and two interruptions of a prune.
   - `TestConcurrentActivation` lists five races between activation operations
     of one project. `TestPruneRefusesActiveRelease` lists two attempts to prune
     the active release.
