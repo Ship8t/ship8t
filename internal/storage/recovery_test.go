@@ -2,11 +2,11 @@ package storage
 
 import "testing"
 
-// TestRecoveryAfterInterruption lists the interruption points of ADR 0003 that
-// the storage code must survive. Turn on a case by replacing its skip with an
-// injected failure at that point, a restart, and the check that the case names.
-// Every case must also leave the active release unchanged, except activation,
-// which leaves the old release or the new one.
+// TestRecoveryAfterInterruption lists the rows of the recovery table of ADR 0003
+// and the interruptions of its activation and prune sequences. Turn on a case by
+// replacing its skip with an injected failure at that point, a restart, and the
+// check that the case names. Every case must also leave the active release
+// unchanged, except activation, which leaves the old release or the new one.
 func TestRecoveryAfterInterruption(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -22,6 +22,11 @@ func TestRecoveryAfterInterruption(t *testing.T) {
 			name:  "staging directory of a terminal or unknown deployment",
 			needs: "recovery at startup",
 			check: "recovery deletes the directory and leaves the active release unchanged",
+		},
+		{
+			name:  "staging directory of a live deployment",
+			needs: "recovery at startup and the idle expiry of a deployment",
+			check: "recovery keeps the directory so the client can resume, idle expiry still applies, and the active release is unchanged",
 		},
 		{
 			name:  "releases directory with no database row",
