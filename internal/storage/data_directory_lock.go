@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"syscall"
 )
 
@@ -37,6 +38,10 @@ func LockDataDirectory(dataDirectory string) (*DataDirectoryLock, error) {
 	}
 	defer root.Close()
 
+	if err := checkLockEntry(root, dataDirectory); err != nil {
+		return nil, err
+	}
+
 	file, err := root.OpenFile(lockFileName, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("lock data directory: %w", err)
@@ -59,6 +64,24 @@ func (lock *DataDirectoryLock) Release() error {
 	// Close the file, which releases the lock that it holds.
 	if err := lock.file.Close(); err != nil {
 		return fmt.Errorf("release data directory lock: %w", err)
+	}
+	return nil
+}
+
+// checkLockEntry accepts a missing lock entry or a regular file and rejects
+// anything else. It looks at the entry itself with Lstat, because os.Root
+// follows a symlink that stays inside the directory, and opening a dangling
+// symlink would create its target.
+func checkLockEntry(root *os.Root, dataDirectory string) error {
+	info, err := root.Lstat(lockFileName)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("lock data directory: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("lock file %q is not a regular file, so remove it and start again", filepath.Join(dataDirectory, lockFileName))
 	}
 	return nil
 }
