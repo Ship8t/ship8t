@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -58,6 +60,10 @@ func Open(ctx context.Context, path string) (*Database, error) {
 		return nil, fmt.Errorf("open database: resolve path: %w", err)
 	}
 
+	if err := createDatabaseFile(absolutePath); err != nil {
+		return nil, err
+	}
+
 	connection, err := sql.Open("sqlite", dataSourceName(absolutePath))
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -70,6 +76,39 @@ func Open(ctx context.Context, path string) (*Database, error) {
 		return nil, errors.Join(err, connection.Close())
 	}
 	return &Database{connection: connection}, nil
+}
+
+// createDatabaseFile makes an empty database file with mode 0600 when it is
+// missing and leaves an existing entry alone. SQLite creates the file otherwise,
+// with a mode that the umask leaves open to group and others, and it gives the
+// -wal and -shm files the mode of this one. The file holds token hashes, so the
+// P0 rule of docs/go-quality.md asks for 0600. It opens the parent directory
+// with os.Root and creates the file with O_EXCL, so a symlink at the path is not
+// followed and nothing is created behind it.
+func createDatabaseFile(path string) error {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer root.Close()
+
+	file, err := root.OpenFile(filepath.Base(path), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, fs.ErrExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("open database: create file: %w", err)
+	}
+	// Set the mode apart from the create, because the umask can clear bits of a
+	// new file and chmod is not subject to it.
+	if err := file.Chmod(0o600); err != nil {
+		return errors.Join(fmt.Errorf("open database: set file mode: %w", err), file.Close())
+	}
+	// Check Close, because a failed close of a written file can mean lost data.
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("open database: create file: %w", err)
+	}
+	return nil
 }
 
 // Close closes the database. It waits for work in progress to finish.
