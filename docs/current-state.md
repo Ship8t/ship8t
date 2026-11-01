@@ -181,7 +181,9 @@ Only the following exists in the code today.
     refused layout creates nothing. It rejects an entry that is not a directory,
     such as a symlink, a file, or a named pipe, because a symlink could lead to
     another volume. It rejects an existing directory that group or other can
-    use, with the `chmod -- 700` command, and does not fix it.
+    use, with the `chmod -- 700` command, and does not fix it. As for the data
+    directory, it omits the command and quotes the path when the path has a
+    control or unprintable character.
   - It leaves an existing directory and its content alone, so a repeat is safe.
     It does not check that `pruning/` and `projects/` share a filesystem, and
     nothing sets the mode of `ship8t.db`. Nothing calls it yet.
