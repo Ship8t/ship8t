@@ -156,6 +156,18 @@ Only the following exists in the code today.
     because `os.Root` follows a symlink that stays inside the directory. An
     existing lock file keeps its mode. A symlink put in place of the entry
     between the check and the open is not caught.
+  - The lock rejects a data directory that group or other can use, so a mode
+    such as 0755 fails and 0700 passes. The error holds the `chmod -- 700`
+    command with the quoted path on one line. It omits the command and quotes
+    the path when the path has a control or unprintable character. The check
+    runs after the checks for an empty, missing, or non-directory path and
+    before the lock file is created, so a refused directory gets no lock file.
+    It reads the mode of the directory that the path leads to, so a symlinked
+    directory is judged by its target.
+  - The access check looks at the mode and not at the owner, so a directory
+    owned by another user passes when its mode is 0700. It does not check the
+    opened directory again. It does not cover the modes of anything created
+    inside the data directory, because nothing creates them yet.
   - The lock builds on unix platforms only, because it uses `syscall.Flock`.
     Nothing calls it yet.
   - Every other test of the package skips until the code it needs exists, so

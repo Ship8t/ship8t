@@ -250,3 +250,25 @@ SQLite transactions are atomic.
   directory private by refusing one that group or others can access. Support
   unix platforms only, because the lock uses `syscall.Flock`, which covers the
   Linux and macOS server platforms of this ADR.
+- 2026-10-31. Clarified how the server judges the access to the data directory
+  while building `internal/storage`, without changing a decision. Refuse a data
+  directory with any permission bit of group or other set, so a mode such as
+  0755 or 0750 fails and 0700 passes. The directory holds the database and the
+  lock file, and the symlink swap that the entry on the lock accepts needs write
+  access to it, so a private directory closes that gap. Run the check after the
+  checks for an empty path, a missing directory, and a path that is not a
+  directory, so the error names the first problem. Run it before the open, so a
+  refused directory never gets a lock file. Read the mode with `os.Stat`, so a
+  symlinked data directory is judged by its target, which is the directory that
+  the server uses. Put the `chmod -- 700` command with the quoted path in the
+  error on one line, and show the quoted path with no command when the path has
+  a control or unprintable character, as the user config error does. Check the
+  mode and not the owner, so a directory owned by another user passes when its
+  mode is 0700. Such a directory is outside what this rule protects, and an
+  owner check would break some container and mounted volume setups. A later ADR
+  entry can add it. Do not check the opened directory again. A swap between the
+  check and the open needs write access to a parent of the path, and anyone with
+  that access can replace the whole data directory, so a second check would not
+  stop that attacker. It would add a path that no test can force without a seam.
+  The check does not cover the modes of the files and directories that a later
+  step creates inside the data directory.
