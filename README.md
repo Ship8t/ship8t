@@ -129,8 +129,24 @@ Only the following exists in the code today.
   - The running stage loads the `ignore` and `include` rules from the
     `ship8t.json` of a test site and scans the site with them. It then
     describes the files and decodes the manifest as the server will.
-- `internal/storage` holds tests and no other code yet. Every test skips until
-  the storage code exists, so none of them checks anything today.
+- `internal/storage` opens the SQLite database and holds skipped tests for the
+  rest of storage. No command or server code uses it yet.
+  - `Open` takes the path of the database file, creates it when it is missing,
+    and returns a `Database`. `Close` closes it. The driver is the pure Go
+    `modernc.org/sqlite`, so no C toolchain is needed.
+  - `Open` sets the journal mode to WAL, `synchronous` to `FULL`, foreign keys
+    on, and a busy timeout of 5 seconds, and it uses one connection, so
+    transactions run one at a time. The settings are part of the connection
+    address, so a connection that the pool opens later has them too.
+  - `Open` reads each setting back and fails when one differs, because SQLite
+    can leave WAL mode off without an error on some filesystems.
+  - `Open` makes a relative path absolute. It rejects an empty path and a path
+    with a NUL byte, because SQLite would cut the name there and open another
+    file.
+  - The database has no tables yet. `Open` does not create the data directory,
+    take the lock file, or set a file mode.
+  - Every other test of the package skips until the code it needs exists, so
+    none of them checks anything today.
   - `TestRecoveryAfterInterruption` lists ten cases from ADR 0003. They are a
     crash before the `ready` commit, the staging directories of dead and live
     deployments, an unknown release directory, a missing release directory, an
@@ -142,8 +158,9 @@ Only the following exists in the code today.
   - Each case names the code it needs and the check to make once that code
     exists.
 
-Deploying, rollback, the server, storage, and authentication are not
-implemented. No command reads a configuration file yet. The commands described
+Deploying, rollback, the server, authentication, and all of storage except
+opening the database are not implemented. No command reads a configuration file
+yet. The commands described
 in the ADRs do not exist yet.
 
 ## Project structure
@@ -160,8 +177,9 @@ in the ADRs do not exist yet.
   config files.
 - `internal/deployment` defines the deployment states and checks the moves
   between them.
-- `internal/storage` will own the data directory of the server and holds only
-  skipped tests for recovery, concurrent activation, and pruning.
+- `internal/storage` will own the data directory of the server. It opens the
+  SQLite database today and holds skipped tests for recovery, concurrent
+  activation, and pruning.
 - `internal/e2e` holds the end-to-end test of the deploy and rollback flow.
 - `docs/adr` holds the architecture decision records.
 - `Makefile` holds the build, test, and analysis targets.
@@ -248,10 +266,13 @@ Partially implemented.
 - [ ] Deployment state machine. `internal/deployment` checks a move between two
   states, and nothing stores a state yet. Persisted states, activation, and
   history do not exist yet.
+- [ ] Storage. `internal/storage` opens the SQLite database with the settings of
+  ADR 0003. The data directory, the lock file, the tables, and the file
+  handling do not exist yet.
 
 Not implemented.
 
-- [ ] Storage, atomic activation, history, and crash recovery.
+- [ ] Atomic activation, history, and crash recovery.
 - [ ] Retention and cleanup.
 - [ ] Server API with project-scoped bearer tokens and resource limits.
 - [ ] Local site serving with `<project>.localhost` routing.

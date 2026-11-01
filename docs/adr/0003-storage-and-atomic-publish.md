@@ -211,3 +211,18 @@ SQLite transactions are atomic.
   Treat an active release whose directory sits in `pruning/` as a missing
   directory, which means log an error, mark the project degraded, and repair
   nothing.
+- 2026-10-31. Clarified how the database opens while building
+  `internal/storage`, without changing a decision. Set the busy timeout to 5000
+  milliseconds, because this ADR asks for one and names no value. Pass every
+  setting in the file address of the database, so a connection that the pool
+  replaces keeps WAL mode, `synchronous=FULL`, foreign keys, and the busy
+  timeout. Read each setting back after the open and fail when one differs,
+  because SQLite leaves WAL mode unchanged without an error on a filesystem
+  that cannot share memory, and the server must not run with weaker durability
+  than this ADR asks. Allow one open connection, so every transaction waits for
+  the one before it. Make the path of the database absolute before building the
+  address, because a file address with a relative path reads its first segment
+  as a host. Reject an empty path and a path with a NUL byte, because SQLite
+  cuts the name at the NUL and opens a different file. Leave `BEGIN IMMEDIATE`
+  to the activation code, which asks for it per transaction. Leave the data
+  directory, the lock file, and the file modes to later steps.
