@@ -395,3 +395,49 @@ func TestCreateDataDirectoryLayoutOmitsCommandForUnprintableEntryPath(t *testing
 		}
 	}
 }
+
+func TestCreateDataDirectoryLayoutDoesNotNameTheLockInCheckErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		dataDirectory func(t *testing.T) string
+		wantMessage   string
+	}{
+		{
+			name:          "empty path",
+			dataDirectory: func(t *testing.T) string { return "" },
+			wantMessage:   "path is empty",
+		},
+		{
+			name: "directory that cannot be looked up",
+			dataDirectory: func(t *testing.T) string {
+				if os.Geteuid() == 0 {
+					t.Skip("root can look up every path")
+				}
+				parent := t.TempDir()
+				if err := os.Chmod(parent, 0o000); err != nil {
+					t.Fatalf("chmod parent: %v", err)
+				}
+				// Restore the mode, so the test cleanup can remove the directory.
+				t.Cleanup(func() { _ = os.Chmod(parent, 0o700) })
+				return filepath.Join(parent, "data")
+			},
+			wantMessage: "permission denied",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := CreateDataDirectoryLayout(test.dataDirectory(t))
+			if err == nil {
+				t.Fatal("CreateDataDirectoryLayout() error = nil, want an error")
+			}
+			if !strings.Contains(err.Error(), test.wantMessage) {
+				t.Errorf("CreateDataDirectoryLayout() error = %q, want it to contain %q", err, test.wantMessage)
+			}
+			// No lock was tried, so a message about locking would mislead.
+			if strings.Contains(err.Error(), "lock data directory") {
+				t.Errorf("CreateDataDirectoryLayout() error = %q, want no mention of the lock", err)
+			}
+		})
+	}
+}

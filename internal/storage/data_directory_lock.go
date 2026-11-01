@@ -75,7 +75,7 @@ func checkDataDirectory(dataDirectory string) error {
 	// Reject an empty path, because the system reports it as a missing file
 	// and that would hide a caller that forgot to set the directory.
 	if dataDirectory == "" {
-		return errors.New("lock data directory: path is empty")
+		return errors.New("data directory path is empty")
 	}
 
 	info, err := os.Stat(dataDirectory)
@@ -87,7 +87,7 @@ func checkDataDirectory(dataDirectory string) error {
 		return fmt.Errorf("data directory %q is not a directory, so point it at a directory", dataDirectory)
 	}
 	if err != nil {
-		return fmt.Errorf("lock data directory: %w", err)
+		return fmt.Errorf("check data directory: %w", err)
 	}
 	return checkDirectoryAccess(info, dataDirectory, "data directory")
 }
