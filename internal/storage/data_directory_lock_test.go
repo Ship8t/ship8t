@@ -219,6 +219,68 @@ func TestLockDataDirectoryCreatesPrivateLockFile(t *testing.T) {
 	}
 }
 
+func TestLockDataDirectoryKeepsModeOfExistingLockFile(t *testing.T) {
+	dataDirectory := t.TempDir()
+	path := filepath.Join(dataDirectory, "lock")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("write lock file: %v", err)
+	}
+	// Set the mode apart from the write, because the umask limits a new file.
+	if err := os.Chmod(path, 0o640); err != nil {
+		t.Fatalf("chmod lock file: %v", err)
+	}
+
+	lock := lockTestDataDirectory(t, dataDirectory)
+	defer func() {
+		if err := lock.Release(); err != nil {
+			t.Errorf("Release() error = %v, want nil", err)
+		}
+	}()
+
+	info, err := os.Lstat(path)
+	if err != nil {
+		t.Fatalf("Lstat(lock) error = %v, want nil", err)
+	}
+	if got := info.Mode().Perm(); got != 0o640 {
+		t.Errorf("lock file permissions = %#o, want %#o left as they were", got, 0o640)
+	}
+}
+
+func TestLockDataDirectoryWritesNothingToLockFile(t *testing.T) {
+	tests := []struct {
+		name            string
+		existingContent string
+	}{
+		{name: "new lock file stays empty", existingContent: ""},
+		{name: "existing content is not truncated or extended", existingContent: "kept"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dataDirectory := t.TempDir()
+			path := filepath.Join(dataDirectory, "lock")
+			if test.existingContent != "" {
+				if err := os.WriteFile(path, []byte(test.existingContent), 0o600); err != nil {
+					t.Fatalf("write lock file: %v", err)
+				}
+			}
+
+			lock := lockTestDataDirectory(t, dataDirectory)
+			if err := lock.Release(); err != nil {
+				t.Fatalf("Release() error = %v, want nil", err)
+			}
+
+			got, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read lock file: %v", err)
+			}
+			if string(got) != test.existingContent {
+				t.Errorf("lock file content = %q, want %q", got, test.existingContent)
+			}
+		})
+	}
+}
+
 func TestLockDataDirectoryFollowsSymlinkedDirectory(t *testing.T) {
 	realDirectory := t.TempDir()
 	linkedDirectory := filepath.Join(t.TempDir(), "linked")
