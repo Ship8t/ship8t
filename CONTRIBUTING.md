@@ -2,8 +2,8 @@
 
 Ship8t is at the start of v1 implementation. The
 [current state](docs/current-state.md) lists what exists, and the
-[README](README.md) lists what is still to do. Pick work from the TODO, or open
-an issue first to discuss anything else.
+[roadmap](README.md#roadmap) lists what is still to do. No item is open to
+outside work yet, so open an issue to discuss any work before you start it.
 
 ## Before you change anything
 
