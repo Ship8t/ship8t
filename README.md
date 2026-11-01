@@ -110,37 +110,43 @@ request and how to run the fuzz tests.
 
 Ship8t is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
 
-## TODO
+## Roadmap
 
-The items below come from the v1 scope in ADR 0001 and the protocol and storage
-ADRs. Nothing in them is implemented unless noted.
+The items come from the v1 scope in ADR 0001 and the protocol and storage ADRs,
+in the build order of ADR 0001. A checked item is done and tested. An unchecked
+item is not done, and its line says what exists. See
+[docs/current-state.md](docs/current-state.md) for the detail.
 
-Implemented.
+Done.
 
-- [x] Manifest validation package shared by the client and the server. The
-  package is `internal/manifest`. The scanner uses it and the server does not
-  use it yet.
+- [x] Manifest validation shared by the client and the server, in
+  `internal/manifest`. The scanner uses it, and the server does not use it yet.
 - [x] Directory scanner with ignore rules, symlink rejection, and secret
-  detection. The package is `internal/scan`. No command calls it yet. Reading
-  `ignore` and `include` from `ship8t.json` belongs to the configuration item
-  below, and the `--allow-sensitive-files` flag belongs to the `deploy` command
-  item.
+  detection, in `internal/scan`. No command calls it yet.
 
-Partially implemented.
+Next, storage and the state machine.
 
-- [ ] `ship8t version` prints the client version only. ADR 0001 also requires
-  the server and API versions when a server is configured.
-- [ ] Exit codes. Only 0 and 2 are used. ADR 0001 defines codes 0 to 6.
-- [ ] Per-command `--help`. Only top-level help exists.
-- [ ] Release automation. `make dist` exists, but publishing release assets with
-  install instructions does not.
-- [ ] End-to-end test and the security test cases listed in ADR 0001. The
-  end-to-end test in `internal/e2e` runs one of seven stages. The scanner and
-  manifest cases have tests, covering traversal, symlinks, malformed and
-  oversized manifests, file counts, and secret detection. The state transition
-  table has a test for every pair of states. The cases for recovery, concurrent
-  activation, and pruning the active release exist in `internal/storage` as
-  skipped placeholders. The other server cases do not exist.
+- [ ] Deployment state machine. `internal/deployment` checks a move between two
+  states, and nothing stores a state yet. Persisted states, activation, and
+  history do not exist yet.
+- [ ] Storage. `internal/storage` opens the SQLite database with the settings of
+  ADR 0003 and locks the data directory. The layout of the data directory, the
+  tables, and the file handling do not exist yet.
+- [ ] Atomic activation, history, and crash recovery.
+- [ ] Retention and cleanup.
+
+After that, the server.
+
+- [ ] Server API with project-scoped bearer tokens and resource limits.
+- [ ] Local site serving with `<project>.localhost` routing.
+- [ ] Server commands `serve`, `token create`, `token list`, and `token revoke`.
+
+After that, the client and the configuration.
+
+- [ ] Client commands `deploy`, `deployments list`, `deployments inspect`,
+  `rollback`, `config show`, `login`, and `logout`. The `deploy` command also
+  owns the `--allow-sensitive-files` flag, which turns off the secret check of
+  the scanner.
 - [ ] Configuration files and precedence. `internal/config` decodes
   `ship8t.json` and the user config, loads `ship8t.json` from a directory, and
   loads the user config with a permission check. Internal helpers find the user
@@ -148,20 +154,37 @@ Partially implemented.
   precedence between sources while keeping the source of each value, and no
   command calls them. `ship8td.json` and passing the project settings to the
   scanner do not exist yet.
-- [ ] Deployment state machine. `internal/deployment` checks a move between two
-  states, and nothing stores a state yet. Persisted states, activation, and
-  history do not exist yet.
-- [ ] Storage. `internal/storage` opens the SQLite database with the settings of
-  ADR 0003 and locks the data directory. The layout of the data directory, the
-  tables, and the file handling do not exist yet.
+- [ ] `ship8t version` prints the client version only. ADR 0001 also requires
+  the server and API versions when a server is configured.
+- [ ] Exit codes. Only 0 and 2 are used. ADR 0001 defines codes 0 to 6.
+- [ ] Per-command `--help`. Only top-level help exists.
 
-Not implemented.
+Across the project.
 
-- [ ] Atomic activation, history, and crash recovery.
-- [ ] Retention and cleanup.
-- [ ] Server API with project-scoped bearer tokens and resource limits.
-- [ ] Local site serving with `<project>.localhost` routing.
-- [ ] Client commands `deploy`, `deployments list`, `deployments inspect`,
-  `rollback`, `config show`, `login`, and `logout`.
-- [ ] Server commands `serve`, `token create`, `token list`, and `token revoke`.
+- [ ] End-to-end test and the security test cases listed in ADR 0001. The
+  end-to-end test in `internal/e2e` runs one of seven stages. The scanner and
+  manifest cases have tests, covering traversal, symlinks, malformed and
+  oversized manifests, file counts, and secret detection. The state transition
+  table has a test for every pair of states. The cases for recovery, concurrent
+  activation, and pruning the active release exist in `internal/storage` as
+  skipped placeholders. The other server cases do not exist.
+- [ ] Release automation. `make dist` exists, but publishing release assets with
+  install instructions does not.
 - [ ] Documentation of a local workflow that needs no paid service.
+
+## Want to contribute?
+
+Nothing on the roadmap is open to outside work yet. I build in the order of
+ADR 0001, and each step depends on the one before it, so two people on the same
+area would collide. Right now I am working on storage and the state machine.
+
+You can still help now.
+
+- Read the ADRs in [docs/adr](docs/adr/README.md). Accepted ADRs are binding.
+  Open an issue where one is unclear, wrong, or in conflict with the code.
+- Run `make fmt-check vet staticcheck test` on your machine and open an issue if
+  a check fails. CI covers Linux and macOS. Windows is not a v1 platform.
+- Open an issue to discuss any work before you start it. Read
+  [CONTRIBUTING.md](CONTRIBUTING.md) first.
+
+Open items are listed here when there are any.

@@ -1,7 +1,8 @@
 # Current state
 
 Update this file in the same change that adds behavior. The
-[README](../README.md) holds the project overview, the structure, and the TODO.
+[README](../README.md) holds the project overview, the structure, and the
+roadmap.
 
 Only the following exists in the code today.
 
