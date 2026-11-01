@@ -23,16 +23,11 @@ type DataDirectoryLock struct {
 // once when another process holds it. The operating system drops the lock when
 // the process exits, so a crash leaves no stale lock behind.
 func LockDataDirectory(dataDirectory string) (*DataDirectoryLock, error) {
-	// Reject an empty path, because the system reports it as a missing file
-	// and that would hide a caller that forgot to set the directory.
-	if dataDirectory == "" {
-		return nil, errors.New("lock data directory: path is empty")
+	if err := checkDataDirectory(dataDirectory); err != nil {
+		return nil, err
 	}
 
 	root, err := os.OpenRoot(dataDirectory)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("data directory %q does not exist, so create it before you start the server", dataDirectory)
-	}
 	if err != nil {
 		return nil, fmt.Errorf("lock data directory: %w", err)
 	}
@@ -64,6 +59,31 @@ func (lock *DataDirectoryLock) Release() error {
 	// Close the file, which releases the lock that it holds.
 	if err := lock.file.Close(); err != nil {
 		return fmt.Errorf("release data directory lock: %w", err)
+	}
+	return nil
+}
+
+// checkDataDirectory accepts an existing directory and rejects an empty path, a
+// missing directory, and a path that is not a directory, each with an error that
+// names the fix. It checks the path itself, because os.OpenRoot reports a file
+// as a plain "not a directory" text that no code can match.
+func checkDataDirectory(dataDirectory string) error {
+	// Reject an empty path, because the system reports it as a missing file
+	// and that would hide a caller that forgot to set the directory.
+	if dataDirectory == "" {
+		return errors.New("lock data directory: path is empty")
+	}
+
+	info, err := os.Stat(dataDirectory)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("data directory %q does not exist, so create it before you start the server", dataDirectory)
+	}
+	// A path below a regular file fails with ENOTDIR instead of a result.
+	if errors.Is(err, syscall.ENOTDIR) || (err == nil && !info.IsDir()) {
+		return fmt.Errorf("data directory %q is not a directory, so point it at a directory", dataDirectory)
+	}
+	if err != nil {
+		return fmt.Errorf("lock data directory: %w", err)
 	}
 	return nil
 }
