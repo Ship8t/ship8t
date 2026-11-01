@@ -85,7 +85,18 @@ func TestLockDataDirectoryRejectsUnusableDirectory(t *testing.T) {
 				}
 				return path
 			},
-			wantMessage: "not a directory",
+			wantMessage: "is not a directory, so point it at a directory",
+		},
+		{
+			name: "path below a regular file",
+			dataDirectory: func(t *testing.T) string {
+				path := filepath.Join(t.TempDir(), "file")
+				if err := os.WriteFile(path, nil, 0o600); err != nil {
+					t.Fatalf("write file: %v", err)
+				}
+				return filepath.Join(path, "data")
+			},
+			wantMessage: "is not a directory, so point it at a directory",
 		},
 	}
 
@@ -205,6 +216,28 @@ func TestLockDataDirectoryCreatesPrivateLockFile(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != 0o600 {
 		t.Errorf("lock file permissions = %#o, want %#o", got, 0o600)
+	}
+}
+
+func TestLockDataDirectoryFollowsSymlinkedDirectory(t *testing.T) {
+	realDirectory := t.TempDir()
+	linkedDirectory := filepath.Join(t.TempDir(), "linked")
+	if err := os.Symlink(realDirectory, linkedDirectory); err != nil {
+		t.Fatalf("make symlink: %v", err)
+	}
+
+	first := lockTestDataDirectory(t, linkedDirectory)
+
+	// The link and the real path name one directory, so they share one lock.
+	second, err := LockDataDirectory(realDirectory)
+	if err == nil {
+		_ = second.Release()
+		_ = first.Release()
+		t.Fatal("LockDataDirectory() through the real path error = nil, want an error while the link holds the lock")
+	}
+
+	if err := first.Release(); err != nil {
+		t.Errorf("Release() error = %v, want nil", err)
 	}
 }
 
