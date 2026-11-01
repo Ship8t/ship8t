@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -102,6 +103,108 @@ func TestLockDataDirectoryRejectsUnusableDirectory(t *testing.T) {
 				t.Errorf("LockDataDirectory() error = %q, want it to contain %q", err, test.wantMessage)
 			}
 		})
+	}
+}
+
+func TestLockDataDirectoryRejectsLockEntryThatIsNotARegularFile(t *testing.T) {
+	tests := []struct {
+		name string
+		make func(t *testing.T, dataDirectory string)
+	}{
+		{
+			name: "symlink to a file in the directory",
+			make: func(t *testing.T, dataDirectory string) {
+				target := filepath.Join(dataDirectory, "target")
+				if err := os.WriteFile(target, nil, 0o600); err != nil {
+					t.Fatalf("write target: %v", err)
+				}
+				if err := os.Symlink("target", filepath.Join(dataDirectory, "lock")); err != nil {
+					t.Fatalf("make symlink: %v", err)
+				}
+			},
+		},
+		{
+			name: "symlink to a file that does not exist",
+			make: func(t *testing.T, dataDirectory string) {
+				if err := os.Symlink("nowhere", filepath.Join(dataDirectory, "lock")); err != nil {
+					t.Fatalf("make symlink: %v", err)
+				}
+			},
+		},
+		{
+			name: "directory",
+			make: func(t *testing.T, dataDirectory string) {
+				if err := os.Mkdir(filepath.Join(dataDirectory, "lock"), 0o700); err != nil {
+					t.Fatalf("make directory: %v", err)
+				}
+			},
+		},
+		{
+			name: "named pipe",
+			make: func(t *testing.T, dataDirectory string) {
+				if err := syscall.Mkfifo(filepath.Join(dataDirectory, "lock"), 0o600); err != nil {
+					t.Fatalf("make named pipe: %v", err)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dataDirectory := t.TempDir()
+			test.make(t, dataDirectory)
+
+			lock, err := LockDataDirectory(dataDirectory)
+			if err == nil {
+				_ = lock.Release()
+				t.Fatal("LockDataDirectory() error = nil, want an error")
+			}
+			if lock != nil {
+				t.Errorf("LockDataDirectory() lock = %v, want nil with an error", lock)
+			}
+			if !strings.Contains(err.Error(), "is not a regular file") {
+				t.Errorf("LockDataDirectory() error = %q, want it to contain %q", err, "is not a regular file")
+			}
+		})
+	}
+}
+
+func TestLockDataDirectoryDoesNotCreateFileThroughSymlink(t *testing.T) {
+	dataDirectory := t.TempDir()
+	if err := os.Symlink("nowhere", filepath.Join(dataDirectory, "lock")); err != nil {
+		t.Fatalf("make symlink: %v", err)
+	}
+
+	if lock, err := LockDataDirectory(dataDirectory); err == nil {
+		_ = lock.Release()
+		t.Fatal("LockDataDirectory() error = nil, want an error")
+	}
+
+	// A refused lock must not leave a new file behind at the link target.
+	target := filepath.Join(dataDirectory, "nowhere")
+	if _, err := os.Lstat(target); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Lstat(%q) error = %v, want it to report that the file does not exist", target, err)
+	}
+}
+
+func TestLockDataDirectoryCreatesPrivateLockFile(t *testing.T) {
+	dataDirectory := t.TempDir()
+	lock := lockTestDataDirectory(t, dataDirectory)
+	defer func() {
+		if err := lock.Release(); err != nil {
+			t.Errorf("Release() error = %v, want nil", err)
+		}
+	}()
+
+	info, err := os.Lstat(filepath.Join(dataDirectory, "lock"))
+	if err != nil {
+		t.Fatalf("Lstat(lock) error = %v, want nil", err)
+	}
+	if !info.Mode().IsRegular() {
+		t.Errorf("lock file mode = %v, want a regular file", info.Mode())
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("lock file permissions = %#o, want %#o", got, 0o600)
 	}
 }
 
