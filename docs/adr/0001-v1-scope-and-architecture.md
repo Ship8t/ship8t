@@ -530,3 +530,26 @@ docs/adr/          architecture decisions
   the directories it read. Keep the token intact in the resolved settings,
   because the `deploy` command sends it. Mask it where the command prints it,
   as section 5 requires, and never print the resolved settings as they are.
+- 2026-10-31. Recorded `modernc.org/sqlite` when the storage code began to use
+  it, as section 9 requires, without changing a decision. The purpose is the
+  server database of ADR 0003. The module is pinned to v1.61.1, which declares
+  `go 1.26.0`, so the `go` line of `go.mod` does not change. The license is
+  BSD-3-Clause, and the SQLite code in it is public domain. The module
+  published a release about every two weeks from September to October 2026,
+  most recently v1.61.1 on 2026-10-31. `govulncheck` found nothing. The
+  alternatives are `mattn/go-sqlite3`, which needs CGO and so breaks the
+  cross-compile rule, and a symlink swap or a pointer file, which ADR 0003
+  rejected. A key value store such as `bbolt` has no SQL, so the activation log
+  and the tables would need hand written indexes. Nine indirect modules join
+  `go.mod`. Six are BSD-3-Clause, which are `modernc.org/libc`,
+  `modernc.org/mathutil`, `modernc.org/memory`, `golang.org/x/sys`,
+  `github.com/google/uuid`, and `github.com/remyoudompheng/bigfft`. Three are
+  MIT, which are `github.com/dustin/go-humanize`, `github.com/mattn/go-isatty`,
+  and `github.com/ncruces/go-strftime`. The last two link on macOS only. The
+  licenses were read from the module files and not from memory. The change adds
+  50 lines to `go.sum`, which cover `modernc.org/sqlite`, the nine modules
+  above, and 15 further modules of the module graph that no build compiles.
+  One of them, `github.com/hashicorp/golang-lru/v2`, is MPL-2.0 and none of its
+  packages is built, tests included, on darwin or linux. Re-check that after
+  every upgrade. The count of direct dependencies is now two, as section 9
+  allows.
