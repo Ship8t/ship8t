@@ -21,30 +21,48 @@ not exist yet.
 
 ## Project structure
 
-- `cmd/ship8t` is the client entry point.
-- `cmd/ship8td` is the server entry point.
-- `internal/version` reports the build version for both binaries.
+Each line says where the part stands today. The file
+[docs/current-state.md](docs/current-state.md) has the detail.
+
+- `cmd/ship8t` is the client entry point. It accepts `version` and `help` only.
+- `cmd/ship8td` is the server entry point. It accepts `version` and `help`
+  only.
+- `internal/version` reports the build version for both binaries. Done.
 - `internal/manifest` validates and decodes deployment manifests for the client
-  and the server.
+  and the server. Done. Only the scanner uses it.
 - `internal/scan` lists the files of a deploy directory, applies the ignore
-  rules, detects secrets, and describes the files for a manifest.
-- `internal/config` reads and validates the config files.
+  rules, detects secrets, and describes the files for a manifest. Done. No
+  command calls it yet.
+- `internal/config` reads and validates the config files. The decoders and the
+  loaders are done, and no command calls them. The server file `ship8td.json`
+  does not exist yet.
 - `internal/strictjson` decodes JSON objects strictly for the manifest and the
-  config files.
+  config files. Done.
 - `internal/deployment` defines the deployment states and checks the moves
-  between them.
+  between them. The check is done, and nothing stores a state yet.
 - `internal/storage` will own the data directory of the server. It opens the
-  SQLite database and locks the data directory today, and it holds skipped tests
-  for recovery, concurrent activation, and pruning.
-- `internal/e2e` holds the end-to-end test of the deploy and rollback flow.
-- `docs/adr` holds the architecture decision records.
+  SQLite database and locks the data directory. The layout of the data
+  directory, the tables, activation, and recovery are still to build, and
+  skipped tests mark the recovery, concurrency, and pruning cases.
+- `internal/e2e` holds the end-to-end test of the deploy and rollback flow. One
+  of its seven stages runs.
+- `docs` holds the documentation. `docs/adr` has the architecture decision
+  records, `docs/current-state.md` has the state of the code, and
+  `docs/go-quality.md` has the Go rules.
+- `.github/workflows` holds the GitHub Actions workflows. `ci.yml` runs the
+  checks on Linux and macOS and `make vuln` on Linux. `codeql.yml` runs CodeQL,
+  and `assign.yml` assigns new issues and pull requests to the maintainer.
 - `Makefile` holds the build, test, and analysis targets.
-- `.github/workflows` holds the GitHub Actions workflows for CI and CodeQL.
+- `CONTRIBUTING.md` explains how to contribute. `AGENTS.md` and `CLAUDE.md` hold
+  the rules for AI coding agents. `LICENSE` is the Apache License 2.0.
+- `go.mod` and `go.sum` hold the Go module and its two direct dependencies.
 
 All packages live under `internal/`, so v1 offers no public Go API.
 
 ## Documentation
 
+- [CONTRIBUTING.md](CONTRIBUTING.md) explains how to set up, which checks to
+  run, how to run the fuzz tests, and how to make a change.
 - [docs/adr](docs/adr/README.md) is the ADR index and explains the status rules.
   Accepted ADRs are binding.
 - [ADR 0001](docs/adr/0001-v1-scope-and-architecture.md) covers v1 scope, the
@@ -63,7 +81,8 @@ All packages live under `internal/`, so v1 offers no public Go API.
 - [docs/go-quality.md](docs/go-quality.md) lists the Go security and reliability
   rules and the automated checks.
 - [AGENTS.md](AGENTS.md) holds the rules for AI coding agents working in this
-  repository, including the commit message rules.
+  repository, including the commit message rules. The file `CLAUDE.md` loads it
+  together with `docs/go-quality.md` for Claude Code.
 
 ## Development
 
@@ -78,6 +97,14 @@ Go 1.26 or newer is required. These targets exist in the `Makefile`.
 - `make vuln` runs `govulncheck` and needs network access.
 - `make dist` cross-compiles both binaries for macOS and Linux on amd64 and
   arm64 and writes a `SHA256SUMS` file.
+- `make clean` removes `bin/` and `dist/`.
+
+To try what exists today, run `make build`, then `bin/ship8t version` or
+`bin/ship8td help`. These are the only commands. Any other command prints the
+usage text to standard error and exits with code 2. A build inside a Git
+checkout shows the commit as its version, and any other build shows `dev`. The
+file [CONTRIBUTING.md](CONTRIBUTING.md) lists the checks to run before a pull
+request and how to run the fuzz tests.
 
 ## License
 
