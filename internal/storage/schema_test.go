@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ship8t/ship8t/internal/deployment"
 )
 
 // execTest runs a statement on the database of a test and fails the test when
@@ -237,5 +239,136 @@ func TestApplySchemaLeavesNothingWhenAStatementFails(t *testing.T) {
 	// Expect a retry on the same database to start from an empty one.
 	if err := database.EnsureSchema(t.Context()); err != nil {
 		t.Errorf("EnsureSchema() after a failed creation error = %v, want nil", err)
+	}
+}
+
+// ensureTestSchema opens a database in a new temporary directory, creates the
+// schema, and adds one project called my-site.
+func ensureTestSchema(t *testing.T) *Database {
+	t.Helper()
+
+	database := openTestDatabase(t)
+	if err := database.EnsureSchema(t.Context()); err != nil {
+		t.Fatalf("EnsureSchema() error = %v, want nil", err)
+	}
+	execTest(t, database, "INSERT INTO projects (id) VALUES ('my-site')")
+	return database
+}
+
+// insertDeploymentTest adds a deployment with the given values, which may be nil.
+func insertDeploymentTest(ctx context.Context, database *Database, id, projectID, state, manifest any) error {
+	_, err := database.connection.ExecContext(ctx, "INSERT INTO deployments (id, project_id, state, manifest) VALUES (?, ?, ?, ?)", id, projectID, state, manifest)
+	return err
+}
+
+func TestDeploymentsTableRejectsInvalidStates(t *testing.T) {
+	tests := []struct {
+		name  string
+		state any
+		want  string
+	}{
+		{name: "published", state: "published", want: "CHECK constraint failed"},
+		{name: "wrong letter case", state: "Ready", want: "CHECK constraint failed"},
+		{name: "trailing space", state: "ready ", want: "CHECK constraint failed"},
+		{name: "empty", state: "", want: "CHECK constraint failed"},
+		{name: "null", state: nil, want: "NOT NULL constraint failed"},
+	}
+
+	database := ensureTestSchema(t)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := insertDeploymentTest(t.Context(), database, "d1", "my-site", test.state, "{}")
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Errorf("insert with state %v error = %v, want it to contain %q", test.state, err, test.want)
+			}
+		})
+	}
+}
+
+func TestDeploymentsTableAcceptsEveryState(t *testing.T) {
+	// Write the states out, so a change of the schema list shows here.
+	states := []deployment.State{
+		deployment.Created,
+		deployment.Uploading,
+		deployment.Ready,
+		deployment.Failed,
+		deployment.Cancelled,
+		deployment.Expired,
+		deployment.Pruned,
+	}
+
+	database := ensureTestSchema(t)
+	for index, state := range states {
+		t.Run(string(state), func(t *testing.T) {
+			id := "deployment" + string(rune('a'+index))
+			if err := insertDeploymentTest(t.Context(), database, id, "my-site", string(state), "{}"); err != nil {
+				t.Errorf("insert with state %q error = %v, want nil", state, err)
+			}
+		})
+	}
+	if got := countTest(t, database, "SELECT count(*) FROM deployments"); got != len(states) {
+		t.Errorf("deployments = %d, want %d", got, len(states))
+	}
+}
+
+func TestDeploymentsTableRequiresAnExistingProject(t *testing.T) {
+	database := ensureTestSchema(t)
+
+	err := insertDeploymentTest(t.Context(), database, "d1", "other-site", "created", "{}")
+	if err == nil || !strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
+		t.Errorf("insert for an unknown project error = %v, want a foreign key error", err)
+	}
+	err = insertDeploymentTest(t.Context(), database, "d1", nil, "created", "{}")
+	if err == nil || !strings.Contains(err.Error(), "NOT NULL constraint failed") {
+		t.Errorf("insert with no project error = %v, want a not null error", err)
+	}
+}
+
+func TestDeploymentsTableKeepsTheProjectOfADeployment(t *testing.T) {
+	database := ensureTestSchema(t)
+	if err := insertDeploymentTest(t.Context(), database, "d1", "my-site", "created", "{}"); err != nil {
+		t.Fatalf("insert deployment: %v", err)
+	}
+
+	_, err := database.connection.ExecContext(t.Context(), "DELETE FROM projects WHERE id = 'my-site'")
+	if err == nil || !strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
+		t.Errorf("delete of a project with a deployment error = %v, want a foreign key error", err)
+	}
+	if got := countTest(t, database, "SELECT count(*) FROM projects"); got != 1 {
+		t.Errorf("projects after the refused delete = %d, want 1", got)
+	}
+
+	var onDelete string
+	err = database.connection.QueryRowContext(t.Context(), "SELECT on_delete FROM pragma_foreign_key_list('deployments')").Scan(&onDelete)
+	if err != nil {
+		t.Fatalf("read the foreign key: %v", err)
+	}
+	if onDelete != "RESTRICT" {
+		t.Errorf("ON DELETE rule = %q, want %q", onDelete, "RESTRICT")
+	}
+
+	// Expect a project with no deployment to be deletable.
+	execTest(t, database, "INSERT INTO projects (id) VALUES ('empty-site')")
+	execTest(t, database, "DELETE FROM projects WHERE id = 'empty-site'")
+}
+
+func TestDeploymentsTableIsStrictAndNeedsAManifest(t *testing.T) {
+	database := ensureTestSchema(t)
+
+	if got := countTest(t, database, "SELECT strict FROM pragma_table_list WHERE name = 'deployments'"); got != 1 {
+		t.Errorf("deployments strict = %d, want 1", got)
+	}
+	err := insertDeploymentTest(t.Context(), database, "d1", "my-site", "created", nil)
+	if err == nil || !strings.Contains(err.Error(), "NOT NULL constraint failed") {
+		t.Errorf("insert with no manifest error = %v, want a not null error", err)
+	}
+	// A number would be converted to text, so use a blob, which STRICT refuses.
+	err = insertDeploymentTest(t.Context(), database, "d2", "my-site", "created", []byte("{}"))
+	if err == nil || !strings.Contains(err.Error(), "cannot store BLOB value in TEXT column") {
+		t.Errorf("insert of a blob as manifest error = %v, want a strict type error", err)
+	}
+	err = insertDeploymentTest(t.Context(), database, nil, "my-site", "created", "{}")
+	if err == nil || !strings.Contains(err.Error(), "NOT NULL constraint failed") {
+		t.Errorf("insert with no ID error = %v, want a not null error", err)
 	}
 }

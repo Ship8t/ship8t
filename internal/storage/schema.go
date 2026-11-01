@@ -26,6 +26,18 @@ var schemaStatements = []string{
 			AND id NOT GLOB '*-'
 		)
 	) STRICT`,
+	// The states are the seven of ADR 0002, so a state read wrongly never
+	// persists. RESTRICT keeps the history of a project that has deployments. No
+	// rule limits the ID or the manifest size, because no ADR gives the shape of
+	// an ID and Decode owns the manifest limit.
+	`CREATE TABLE deployments (
+		id TEXT NOT NULL PRIMARY KEY,
+		project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE RESTRICT,
+		state TEXT NOT NULL CHECK (
+			state IN ('created', 'uploading', 'ready', 'failed', 'cancelled', 'expired', 'pruned')
+		),
+		manifest TEXT NOT NULL
+	) STRICT`,
 }
 
 // EnsureSchema makes the database ready for the server. It creates schema
