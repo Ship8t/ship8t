@@ -170,6 +170,21 @@ Only the following exists in the code today.
     and the directories that later steps create inside the data directory.
   - The lock builds on unix platforms only, because it uses `syscall.Flock`.
     Nothing calls it yet.
+  - `CreateDataDirectoryLayout` makes `projects/`, `quarantine/`, and
+    `pruning/` inside an existing data directory with mode 0700. It sets the
+    mode with `chmod`, so the umask does not change it. The directories of a
+    project come with the project, and nothing creates them yet.
+  - It applies the checks of the lock first, so it rejects an empty, missing, or
+    non-directory path and a data directory that group or other can use. It
+    never creates the data directory. Call it after `LockDataDirectory`.
+  - It checks every existing entry before it makes the first directory, so a
+    refused layout creates nothing. It rejects an entry that is not a directory,
+    such as a symlink, a file, or a named pipe, because a symlink could lead to
+    another volume. It rejects an existing directory that group or other can
+    use, with the `chmod -- 700` command, and does not fix it.
+  - It leaves an existing directory and its content alone, so a repeat is safe.
+    It does not check that `pruning/` and `projects/` share a filesystem, and
+    nothing sets the mode of `ship8t.db`. Nothing calls it yet.
   - Every other test of the package skips until the code it needs exists, so
     none of them checks anything today.
   - `TestRecoveryAfterInterruption` lists ten cases from ADR 0003. They are a
