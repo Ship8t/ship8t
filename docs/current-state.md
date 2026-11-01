@@ -225,11 +225,32 @@ Only the following exists in the code today.
     directory, it omits the command and quotes the path when the path has a
     control or unprintable character.
   - It leaves an existing directory and its content alone, so a repeat is safe.
-    It does not check that `pruning/` and `projects/` share a filesystem.
-    Nothing calls it yet.
-  - The tests for `Open`, the lock, the access rule, and the layout run and
-    pass. Only the cases listed below skip until the code they need exists, so
-    none of them checks anything today.
+    It does not check that `pruning/` and `projects/` share a filesystem, which
+    `CheckLayoutFilesystem` does. Nothing calls it yet.
+  - `CheckLayoutFilesystem` rejects a data directory whose `projects/` and
+    `pruning/` are on different filesystems, because ADR 0003 moves a release
+    between them with an atomic rename. Call it after
+    `CreateDataDirectoryLayout`. It changes nothing and fixes nothing. Nothing
+    calls it yet.
+  - It applies the checks of the layout first, so it rejects an empty, missing,
+    or non-directory path and a data directory that group or other can use. It
+    looks at `projects/` and `pruning/` with `Lstat`. It rejects an entry that
+    is not a directory or that group or other can use, with the errors of the
+    layout, so a symlink never stands for its target. It rejects a missing
+    entry with an error that says to create the layout first.
+  - It compares the device of the two directories. The error for two devices
+    names both directories on one line and says to put them on one filesystem.
+    It quotes each path, so an unprintable path stays on one line, and it never
+    prints a device ID. A directory with no stat result gets its own error, so
+    an unknown device never counts as the same.
+  - It does not catch a bind mount of the same filesystem, which can show one
+    device and still fail a rename with `EXDEV`. It does not look at
+    `quarantine/` or at a mount below `projects/<id>`, which the step that
+    creates a project checks. No test can make a real mount, so the refusal is
+    tested through an unexported function that takes two directories.
+  - The tests for `Open`, the lock, the access rule, the layout, and the
+    filesystem check run and pass. Only the cases listed below skip until the
+    code they need exists, so none of them checks anything today.
   - `TestRecoveryAfterInterruption` lists ten cases from ADR 0003. They are a
     crash before the `ready` commit, the staging directories of dead and live
     deployments, an unknown release directory, a missing release directory, an

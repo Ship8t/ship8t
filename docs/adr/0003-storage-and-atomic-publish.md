@@ -371,3 +371,38 @@ SQLite transactions are atomic.
   belongs in the transaction, and the lock and the single connection leave none.
   A STRICT table already makes a primary key column NOT NULL, so the keyword on
   the ID of `deployments` is redundant and no test can tell it apart.
+- 2026-11-01. Clarified how the server checks that the layout shares a
+  filesystem while building `internal/storage`, without changing a decision.
+  This ADR needs `projects/` and `pruning/` on one filesystem, so that moving a
+  release into `pruning/` is an atomic rename. The layout entry of this date
+  left the check to a later step, and this entry adds it. Check it with a
+  separate function, `CheckLayoutFilesystem`, that the caller runs after the
+  layout, so the layout and its tests stay as they are. Apply the checks of the
+  layout first, which are an empty path, a missing directory, a path that is not
+  a directory, and a mode that group or other can use, in that order. Look at
+  `projects/` and `pruning/` with `Lstat` through `os.Root`. Refuse an entry
+  that is not a directory, and refuse one that group or other can use, with the
+  errors of the layout, so a layout that the layout function would refuse never
+  passes. When either directory is missing, fail with an error that says to
+  create the layout first. Compare the device of the two directories and refuse
+  when they differ, with one line that names both directories and says to put
+  them on one filesystem. Quote each path, so an unprintable one stays on one
+  line, and never print a device ID. When a directory has no stat result, fail
+  with its own error that names the directory and the type found, so an unknown
+  device never counts as the same. Change nothing, so the check never fixes a
+  layout. The start order is the lock, the layout, the filesystem check, the
+  database, and then recovery, and `ship8td serve` owns it. Nothing calls the
+  check yet. Accept these limits. A bind mount of the same filesystem can show
+  one device ID and still fail a rename with `EXDEV`, so the comparison can miss
+  it, and no test without root can show either case. A mount below
+  `projects/<id>`, such as at `releases`, cannot exist before a project does, so
+  the step that creates a project checks it. The check does not look at
+  `quarantine/`, because this ADR does not ask for it to share the filesystem,
+  and the recovery design decides whether it should. The check looks at each
+  entry twice, once for its type and mode and once for its device, and a swap
+  between the two needs write access to the private data directory, which is the
+  same limit as the other checks. Only a real mount makes two entries differ, so
+  the refusal is tested through the unexported function that compares two
+  directories, and no test catches a caller that drops its result or swaps the
+  two paths. Replacing `Lstat` with `Stat` changes nothing, because the check of
+  the type refuses a symlink first.
