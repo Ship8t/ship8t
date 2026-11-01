@@ -327,3 +327,47 @@ SQLite transactions are atomic.
   with the operating system error and no longer with the SQLite text. This entry
   does not check that `pruning/` and `projects/` share a filesystem, and it does
   not check the mode of a file again after the open.
+- 2026-11-01. Clarified how the server creates the schema of the database while
+  building `internal/storage`, without changing a decision. Mark a database made
+  by this code with `user_version` 1, because no ADR names a schema version.
+  Read the version and the contents of the database and then set the version and
+  create the tables, all in one plain transaction, so a failed statement leaves
+  version 0 and no tables. Set the version before the statements, so a failure
+  shows that the rollback undoes it too. Use a plain transaction and not `BEGIN
+  IMMEDIATE`, which stays with the activation code, because the lock and the
+  single connection leave no other writer. Create version 1 in a database with
+  version 0 and no tables, and do not count a table whose name starts with
+  `sqlite_`, because a dropped `AUTOINCREMENT` table leaves `sqlite_sequence`
+  behind. Accept version 1 and change nothing. Refuse a database that has tables
+  and version 0, and a database with any other version, a negative one included.
+  Name the version found and the version wanted in the error, say what the
+  operator can do, and leave the database as it was. Run the guard after `Open`
+  and not inside it, so `Open` keeps opening a database that has no version.
+  Build no migration framework, because the first release has one schema. Until
+  that release, version 1 grows in place with each table, so a development
+  database from an earlier step still says version 1 and the operator deletes
+  it. Trust a database at version 1 and do not read its tables to check their
+  shape. The first schema holds `projects` and `deployments`, both `STRICT`.
+  `projects` has the ID as its primary key, and a CHECK holds the slug rule of
+  this ADR, which is 1 to 63 bytes of lowercase letters, digits, and hyphens
+  with no leading or trailing hyphen. The CHECK compares the length in bytes
+  with the length in characters, because SQLite text functions stop at a NUL
+  byte and would let a name with one pass. The CHECK is a backstop. The code
+  that creates a project still validates the ID before it builds a path.
+  `deployments` has the ID as its primary key, the project ID as a foreign key
+  with `ON DELETE RESTRICT`, so no project can be deleted while a deployment of
+  it exists and history stays whole, a state that a CHECK limits to the seven
+  states of ADR 0002, and the manifest as text. The state CHECK keeps a state
+  that was read wrongly from persisting. Put no CHECK on the deployment ID,
+  because no ADR gives its shape. Put no CHECK on the size of the manifest,
+  because `Decode` owns the limit of ADR 0004. Leave the active pointer, the
+  timestamps, the rows for files, the tokens, the activation log, and the
+  idempotency keys to the code that needs each one. The pointer needs a foreign
+  key to `deployments`, which would make a cycle with this table. Accept three
+  limits that the tests cannot show. A crash between the commit and a version
+  set outside the transaction would be the only way to see that the version
+  belongs in the transaction, and no seam forces that crash. A second writer
+  between the read and the create would be the only way to see that the read
+  belongs in the transaction, and the lock and the single connection leave none.
+  A STRICT table already makes a primary key column NOT NULL, so the keyword on
+  the ID of `deployments` is redundant and no test can tell it apart.
