@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"syscall"
 )
@@ -21,7 +22,16 @@ type DataDirectoryLock struct {
 // once when another process holds it. The operating system drops the lock when
 // the process exits, so a crash leaves no stale lock behind.
 func LockDataDirectory(dataDirectory string) (*DataDirectoryLock, error) {
+	// Reject an empty path, because the system reports it as a missing file
+	// and that would hide a caller that forgot to set the directory.
+	if dataDirectory == "" {
+		return nil, errors.New("lock data directory: path is empty")
+	}
+
 	root, err := os.OpenRoot(dataDirectory)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("data directory %q does not exist, so create it before you start the server", dataDirectory)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("lock data directory: %w", err)
 	}
