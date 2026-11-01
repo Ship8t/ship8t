@@ -108,7 +108,7 @@ func checkDirectoryAccess(info fs.FileInfo, path, description string) error {
 	}
 
 	// Keep the message on one line, so a path cannot forge a second one.
-	if command, ok := chmodCommand(path); ok {
+	if command, ok := chmodCommand("700", path); ok {
 		return fmt.Errorf("%s can be used by group or other, mode %04o, run: %s", description, mode, command)
 	}
 	return fmt.Errorf("%s %q can be used by group or other, mode %04o, run chmod 700 on that directory", description, path, mode)
