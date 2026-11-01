@@ -15,9 +15,9 @@ The code covers only the start of v1. See
 package.
 
 Deploying, rollback, the server, authentication, and all of storage except
-opening the database and locking the data directory are not implemented. No
-command reads a configuration file yet. The commands described in the ADRs do
-not exist yet.
+opening the database, locking the data directory, and making its top level
+directories are not implemented. No command reads a configuration file yet. The
+commands described in the ADRs do not exist yet.
 
 ## Project structure
 
@@ -41,9 +41,10 @@ Each line says where the part stands today. See
 - `internal/deployment` defines the deployment states and checks the moves
   between them. The check is done, and nothing stores a state yet.
 - `internal/storage` will own the data directory of the server. It opens the
-  SQLite database and locks the data directory. The layout of the data
-  directory, the tables, activation, and recovery are still to build, and
-  skipped tests mark the recovery, concurrency, and pruning cases.
+  SQLite database, locks the data directory, and makes its top level
+  directories. The directories of a project, the tables, activation, and
+  recovery are still to build, and skipped tests mark the recovery,
+  concurrency, and pruning cases.
 - `internal/e2e` holds the end-to-end test of the deploy and rollback flow. One
   of its seven stages runs.
 - `docs` holds the documentation. `docs/adr` has the architecture decision
@@ -130,8 +131,9 @@ Next, storage and the state machine.
   states, and nothing stores a state yet. Persisted states, activation, and
   history do not exist yet.
 - [ ] Storage. `internal/storage` opens the SQLite database with the settings of
-  ADR 0003 and locks the data directory. The layout of the data directory, the
-  tables, and the file handling do not exist yet.
+  ADR 0003, locks the data directory, and makes its top level directories. The
+  directories of a project, the tables, and the file handling do not exist
+  yet.
 - [ ] Atomic activation, history, and crash recovery.
 - [ ] Retention and cleanup.
 

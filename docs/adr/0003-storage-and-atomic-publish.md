@@ -272,3 +272,26 @@ SQLite transactions are atomic.
   stop that attacker. It would add a path that no test can force without a seam.
   The check does not cover the modes of the files and directories that a later
   step creates inside the data directory.
+- 2026-11-01. Clarified how the server makes the layout of the data directory
+  while building `internal/storage`, without changing a decision. Make
+  `projects/`, `quarantine/`, and `pruning/` inside the data directory, and
+  leave `staging/` and `releases/` to the step that creates a project, because
+  they sit under `projects/<project-id>/` and nothing can name a project yet.
+  Give each directory mode 0700 and set it with `chmod` after the `mkdir`,
+  because the umask limits a new directory and the mode must not depend on it.
+  Never create the data directory, as the entry on the lock says, and apply the
+  same checks for an empty, missing, or non-directory path and for a mode that
+  group or other can use, in that order. Check every existing entry before the
+  first `mkdir`, so a refused layout creates nothing. Look at each entry with
+  `Lstat` and refuse a symlink, a file, or any other entry that is not a
+  directory. `os.Root` follows a symlink that stays inside the directory, and a
+  symlinked `pruning/` or `projects/` could lead to another volume, which would
+  break the atomic rename that this ADR needs between them. Refuse an existing
+  directory that group or other can use with the `chmod -- 700` error and do not
+  fix it, because a silent fix would hide that something else changed the mode.
+  Leave an existing directory and its content alone, so a restart is safe. Run
+  the layout after the lock, and run recovery after the database opens, so the
+  start order is the lock, the layout, the database, and then recovery.
+  `ship8td serve` owns that order, and nothing calls the layout yet. This entry
+  does not check that `pruning/` and `projects/` share a filesystem, and it does
+  not set the mode of `ship8t.db` and its journal files. Each is its own step.
