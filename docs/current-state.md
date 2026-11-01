@@ -79,7 +79,7 @@ Only the following exists in the code today.
   - `LoadUserFile` refuses a symlinked `config.json` and any other file that is
     not a regular file. It refuses a file that group or other can access before
     it reads a byte, and it checks the opened file again. The error holds the
-    `chmod 600` command on one line. It omits the command and quotes the path
+    `chmod -- 600` command on one line. It omits the command and quotes the path
     when the path has a control or unprintable character.
   - The package finds the `ship8t` directory. It uses `XDG_CONFIG_HOME` when
     that is an absolute path and `~/.config` otherwise, so it ignores a relative
@@ -187,7 +187,8 @@ Only the following exists in the code today.
   - It leaves an existing directory and its content alone, so a repeat is safe.
     It does not check that `pruning/` and `projects/` share a filesystem, and
     nothing sets the mode of `ship8t.db`. Nothing calls it yet.
-  - Every other test of the package skips until the code it needs exists, so
+  - The tests for `Open`, the lock, the access rule, and the layout run and
+    pass. Only the cases listed below skip until the code they need exists, so
     none of them checks anything today.
   - `TestRecoveryAfterInterruption` lists ten cases from ADR 0003. They are a
     crash before the `ready` commit, the staging directories of dead and live
