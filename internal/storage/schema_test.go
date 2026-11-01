@@ -372,3 +372,27 @@ func TestDeploymentsTableIsStrictAndNeedsAManifest(t *testing.T) {
 		t.Errorf("insert with no ID error = %v, want a not null error", err)
 	}
 }
+
+func TestTablesRejectDuplicateIDs(t *testing.T) {
+	database := ensureTestSchema(t)
+	if err := insertDeploymentTest(t.Context(), database, "d1", "my-site", "created", "{}"); err != nil {
+		t.Fatalf("insert deployment: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		statement string
+		want      string
+	}{
+		{name: "project", statement: "INSERT INTO projects (id) VALUES ('my-site')", want: "UNIQUE constraint failed: projects.id"},
+		{name: "deployment", statement: "INSERT INTO deployments (id, project_id, state, manifest) VALUES ('d1', 'my-site', 'ready', '{}')", want: "UNIQUE constraint failed: deployments.id"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := database.connection.ExecContext(t.Context(), test.statement)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Errorf("duplicate %s error = %v, want it to contain %q", test.name, err, test.want)
+			}
+		})
+	}
+}
