@@ -129,8 +129,9 @@ Only the following exists in the code today.
   - The running stage loads the `ignore` and `include` rules from the
     `ship8t.json` of a test site and scans the site with them. It then
     describes the files and decodes the manifest as the server will.
-- `internal/storage` opens the SQLite database and holds skipped tests for the
-  rest of storage. No command or server code uses it yet.
+- `internal/storage` opens the SQLite database, locks the data directory, and
+  holds skipped tests for the rest of storage. No command or server code uses
+  it yet.
   - `Open` takes the path of the database file, creates it when it is missing,
     and returns a `Database`. `Close` closes it. The driver is the pure Go
     `modernc.org/sqlite`, so no C toolchain is needed.
@@ -144,7 +145,25 @@ Only the following exists in the code today.
     with a NUL byte, because SQLite would cut the name there and open another
     file.
   - The database has no tables yet. `Open` does not create the data directory,
-    take the lock file, or set a file mode.
+    take the lock, or set a file mode.
+  - `LockDataDirectory` takes the exclusive lock on a data directory and returns
+    a `DataDirectoryLock`. `Release` gives the lock up. A server holds the lock
+    for its whole life, so two server processes never share a directory.
+  - The lock is a `flock` on the file `lock`, which the code opens through
+    `os.Root` and creates with mode 0600. A second attempt fails at once with an
+    error that names the directory and asks to stop the other process or choose
+    another directory. The file holds nothing, and the operating system drops
+    the lock when the process exits, so a crash leaves no stale lock.
+  - The lock rejects an empty path, a missing directory, and a path that is not
+    a directory. It never creates the directory, so a mistyped path does not
+    make a new empty one. It follows a symlinked directory.
+  - The lock rejects a `lock` entry that is not a regular file, such as a
+    symlink, a directory, or a named pipe. It checks the entry with `Lstat`,
+    because `os.Root` follows a symlink that stays inside the directory. An
+    existing lock file keeps its mode. A symlink put in place of the entry
+    between the check and the open is not caught.
+  - The lock builds on unix platforms only, because it uses `syscall.Flock`.
+    Nothing calls it yet.
   - Every other test of the package skips until the code it needs exists, so
     none of them checks anything today.
   - `TestRecoveryAfterInterruption` lists ten cases from ADR 0003. They are a
@@ -159,9 +178,9 @@ Only the following exists in the code today.
     exists.
 
 Deploying, rollback, the server, authentication, and all of storage except
-opening the database are not implemented. No command reads a configuration file
-yet. The commands described
-in the ADRs do not exist yet.
+opening the database and locking the data directory are not implemented. No
+command reads a configuration file yet. The commands described in the ADRs do
+not exist yet.
 
 ## Project structure
 
@@ -178,8 +197,8 @@ in the ADRs do not exist yet.
 - `internal/deployment` defines the deployment states and checks the moves
   between them.
 - `internal/storage` will own the data directory of the server. It opens the
-  SQLite database today and holds skipped tests for recovery, concurrent
-  activation, and pruning.
+  SQLite database and locks the data directory today, and it holds skipped tests
+  for recovery, concurrent activation, and pruning.
 - `internal/e2e` holds the end-to-end test of the deploy and rollback flow.
 - `docs/adr` holds the architecture decision records.
 - `Makefile` holds the build, test, and analysis targets.
@@ -267,8 +286,8 @@ Partially implemented.
   states, and nothing stores a state yet. Persisted states, activation, and
   history do not exist yet.
 - [ ] Storage. `internal/storage` opens the SQLite database with the settings of
-  ADR 0003. The data directory, the lock file, the tables, and the file
-  handling do not exist yet.
+  ADR 0003 and locks the data directory. The layout of the data directory, the
+  tables, and the file handling do not exist yet.
 
 Not implemented.
 
