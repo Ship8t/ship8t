@@ -226,7 +226,7 @@ func TestOpenRejectsUnusablePath(t *testing.T) {
 			path: func(t *testing.T) string {
 				return filepath.Join(t.TempDir(), "missing", "ship8t.db")
 			},
-			wantMessage: "unable to open database file",
+			wantMessage: "no such file or directory",
 		},
 		{
 			name:        "path that names a directory",
