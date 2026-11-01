@@ -60,7 +60,7 @@ func Open(ctx context.Context, path string) (*Database, error) {
 		return nil, fmt.Errorf("open database: resolve path: %w", err)
 	}
 
-	if err := createDatabaseFile(absolutePath); err != nil {
+	if err := prepareDatabaseFiles(absolutePath); err != nil {
 		return nil, err
 	}
 
@@ -78,21 +78,71 @@ func Open(ctx context.Context, path string) (*Database, error) {
 	return &Database{connection: connection}, nil
 }
 
-// createDatabaseFile makes an empty database file with mode 0600 when it is
-// missing and leaves an existing entry alone. SQLite creates the file otherwise,
-// with a mode that the umask leaves open to group and others, and it gives the
-// -wal and -shm files the mode of this one. The file holds token hashes, so the
-// P0 rule of docs/go-quality.md asks for 0600. It opens the parent directory
-// with os.Root and creates the file with O_EXCL, so a symlink at the path is not
-// followed and nothing is created behind it.
-func createDatabaseFile(path string) error {
-	root, err := os.OpenRoot(filepath.Dir(path))
+// databaseFileSuffixes names the files that SQLite keeps for one database, as
+// suffixes of the database file name. The empty suffix is the main file.
+var databaseFileSuffixes = []string{"", "-wal", "-shm"}
+
+// prepareDatabaseFiles rejects a database file that group or other can use and
+// then makes the main file when it is missing, so the database files are never
+// open to anyone but the owner. It checks all three files before it creates
+// one, so a refused open creates nothing. It opens the parent directory with
+// os.Root and reaches every file through that root.
+func prepareDatabaseFiles(path string) error {
+	directory, name := filepath.Split(path)
+	root, err := os.OpenRoot(directory)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer root.Close()
 
-	file, err := root.OpenFile(filepath.Base(path), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	for _, suffix := range databaseFileSuffixes {
+		if err := checkDatabaseFile(root, directory, name+suffix); err != nil {
+			return err
+		}
+	}
+	return createDatabaseFile(root, name)
+}
+
+// checkDatabaseFile accepts a missing entry or a regular file that only its
+// owner can use, and rejects anything else. The -wal and -shm files can outlive
+// a crash with the mode of an earlier run, and they hold the same pages as the
+// main file. It looks at the entry itself with Lstat, because os.Root follows a
+// symlink that stays inside the directory, and SQLite follows a symlink at the
+// path, so a dangling one would make SQLite create its target.
+func checkDatabaseFile(root *os.Root, directory, name string) error {
+	info, err := root.Lstat(name)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+
+	// Join as text, so the path names the entry that the system opens.
+	path := directory + name
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("database file %q is not a regular file, so remove it and start again", path)
+	}
+	mode := info.Mode().Perm()
+	if mode&groupOtherAccess == 0 {
+		return nil
+	}
+
+	// Keep the message on one line, so a path cannot forge a second one.
+	if command, ok := chmodCommand("600", path); ok {
+		return fmt.Errorf("database file can be used by group or other, mode %04o, run: %s", mode, command)
+	}
+	return fmt.Errorf("database file %q can be used by group or other, mode %04o, run chmod 600 on that file", path, mode)
+}
+
+// createDatabaseFile makes an empty database file with mode 0600 when it is
+// missing and leaves an existing entry alone. SQLite creates the file otherwise,
+// with a mode that the umask leaves open to group and others, and it gives the
+// -wal and -shm files the mode of this one. The file holds token hashes, so the
+// P0 rule of docs/go-quality.md asks for 0600. It creates the file with O_EXCL,
+// so a symlink at the path is not followed and nothing is created behind it.
+func createDatabaseFile(root *os.Root, name string) error {
+	file, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if errors.Is(err, fs.ErrExist) {
 		return nil
 	}
