@@ -123,9 +123,9 @@ Only the following exists in the code today.
   - The running stage loads the `ignore` and `include` rules from the
     `ship8t.json` of a test site and scans the site with them. It then
     describes the files and decodes the manifest as the server will.
-- `internal/storage` opens the SQLite database, locks the data directory, and
-  holds skipped tests for the rest of storage. No command or server code uses
-  it yet.
+- `internal/storage` opens the SQLite database, creates its first tables, locks
+  the data directory, and holds skipped tests for the rest of storage. No
+  command or server code uses it yet.
   - `Open` takes the path of the database file, creates it when it is missing,
     and returns a `Database`. `Close` closes it. The driver is the pure Go
     `modernc.org/sqlite`, so no C toolchain is needed.
@@ -155,8 +155,30 @@ Only the following exists in the code today.
   - `Open` makes a relative path absolute. It rejects an empty path and a path
     with a NUL byte, because SQLite would cut the name there and open another
     file.
-  - The database has no tables yet. `Open` does not create the data directory
-    or take the lock.
+  - `Open` does not create the tables, the data directory, or the lock.
+  - `EnsureSchema` makes the database ready. Call it after `Open`. It runs in
+    one plain transaction that reads the schema version and the contents of the
+    database and then creates the tables. A database with version 0 and no
+    tables gets version 1 and the tables. A table that SQLite keeps for itself,
+    such as `sqlite_sequence`, does not count.
+  - `EnsureSchema` accepts a database with version 1 and changes nothing. It
+    refuses a database that has tables and version 0, and a database with any
+    other version, a negative one included. The error names the version found
+    and the version wanted and says what to do. A refused database stays as it
+    was, and a failed creation leaves version 0 and no tables.
+  - Version 1 has two tables, both `STRICT`. `projects` holds the ID, which a
+    CHECK limits to a slug of 1 to 63 bytes of lowercase letters, digits, and
+    hyphens with no leading or trailing hyphen. The CHECK rejects a NUL byte.
+  - `deployments` holds the ID, the project ID, the state, and the manifest as
+    text. The project ID is a foreign key to `projects` with `ON DELETE
+    RESTRICT`, so a project with a deployment cannot be deleted. A CHECK limits
+    the state to the seven states of ADR 0002.
+  - No rule limits the deployment ID or the size of the manifest. The tables
+    have no timestamps and no active pointer, and there are no tables for files,
+    tokens, the activation log, or idempotency keys yet. Nothing writes a row.
+  - Version 1 grows with each table until the first release. A development
+    database from an earlier step still says version 1, so delete it by hand.
+    There is no migration.
   - `LockDataDirectory` takes the exclusive lock on a data directory and returns
     a `DataDirectoryLock`. `Release` gives the lock up. A server holds the lock
     for its whole life, so two server processes never share a directory.
