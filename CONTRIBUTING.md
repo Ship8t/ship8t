@@ -1,8 +1,9 @@
 # Contributing to Ship8t
 
-Ship8t is at the start of v1 implementation. The [README](README.md) lists what
-exists and what is still to do. Pick work from that list, or open an issue first
-to discuss anything else.
+Ship8t is at the start of v1 implementation. The
+[current state](docs/current-state.md) lists what exists, and the
+[README](README.md) lists what is still to do. Pick work from the TODO, or open
+an issue first to discuss anything else.
 
 ## Before you change anything
 
