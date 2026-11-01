@@ -226,3 +226,27 @@ SQLite transactions are atomic.
   cuts the name at the NUL and opens a different file. Leave `BEGIN IMMEDIATE`
   to the activation code, which asks for it per transaction. Leave the data
   directory, the lock file, and the file modes to later steps.
+- 2026-10-31. Clarified how the server locks the data directory while building
+  `internal/storage`, without changing a decision. Take an exclusive `flock` on
+  the `lock` file without waiting, so a second process fails at once with an
+  error that names the directory and asks the operator to stop the other
+  process or choose another directory. Write nothing to the file, because the
+  lock is the `flock` and not the content. The operating system drops the lock
+  when the process exits, so a crash leaves no stale lock. Open the directory
+  with `os.Root` and create the file with mode 0600. Never create the data
+  directory, because a mistyped path would make a new empty one in the wrong
+  place, and fail with an error that says to create it. Reject an empty path,
+  and reject a path that is not a directory by checking the path with
+  `os.Stat`, because `os.OpenRoot` reports a file with plain text that no code
+  can match. Follow a symlinked data directory, which operators use to reach
+  another volume. Look at the `lock` entry with `Lstat` before the open and
+  reject a symlink, a directory, a named pipe, or any other entry that is not a
+  regular file. `os.Root` follows a symlink that stays inside the directory, so
+  without the check the lock would sit on the wrong file, and the open would
+  create the target of a dangling symlink. Leave the mode of an existing lock
+  file alone. Accept that a symlink put in place of the entry between the check
+  and the open is not caught. It needs write access to the data directory, and
+  anyone with that access can change the database too. A later step makes the
+  directory private by refusing one that group or others can access. Support
+  unix platforms only, because the lock uses `syscall.Flock`, which covers the
+  Linux and macOS server platforms of this ADR.
