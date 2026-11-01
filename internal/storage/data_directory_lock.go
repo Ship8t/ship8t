@@ -89,26 +89,28 @@ func checkDataDirectory(dataDirectory string) error {
 	if err != nil {
 		return fmt.Errorf("lock data directory: %w", err)
 	}
-	return checkDataDirectoryAccess(info, dataDirectory)
+	return checkDirectoryAccess(info, dataDirectory, "data directory")
 }
 
-// checkDataDirectoryAccess rejects a directory that group or other can use,
-// because it holds the database and the lock file, and a symlink put in place of
-// the lock entry needs write access to the directory. It reads the mode of the
-// directory that the path leads to, so a symlinked data directory is judged by
-// its target. It does not check the opened directory again, because a swap
-// between the check and the open needs write access to a parent of the path.
-func checkDataDirectoryAccess(info fs.FileInfo, dataDirectory string) error {
+// checkDirectoryAccess rejects a directory that group or other can use. The data
+// directory holds the database and the lock file, and a symlink put in place of
+// the lock entry needs write access to it. The entries inside hold the releases,
+// so they get the same rule. It reads the mode of the directory that the path
+// leads to, so a symlinked data directory is judged by its target. It does not
+// check the opened directory again, because a swap between the check and the
+// open needs write access to a parent of the path. The description starts the
+// message, such as "data directory".
+func checkDirectoryAccess(info fs.FileInfo, path, description string) error {
 	mode := info.Mode().Perm()
 	if mode&groupOtherAccess == 0 {
 		return nil
 	}
 
 	// Keep the message on one line, so a path cannot forge a second one.
-	if command, ok := chmodCommand(dataDirectory); ok {
-		return fmt.Errorf("data directory can be used by group or other, mode %04o, run: %s", mode, command)
+	if command, ok := chmodCommand(path); ok {
+		return fmt.Errorf("%s can be used by group or other, mode %04o, run: %s", description, mode, command)
 	}
-	return fmt.Errorf("data directory %q can be used by group or other, mode %04o, run chmod 700 on that directory", dataDirectory, mode)
+	return fmt.Errorf("%s %q can be used by group or other, mode %04o, run chmod 700 on that directory", description, path, mode)
 }
 
 // checkLockEntry accepts a missing lock entry or a regular file and rejects
