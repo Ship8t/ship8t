@@ -231,7 +231,7 @@ func TestOpenRejectsUnusablePath(t *testing.T) {
 		{
 			name:        "path that names a directory",
 			path:        func(t *testing.T) string { return t.TempDir() },
-			wantMessage: "unable to open database file",
+			wantMessage: "is not a regular file",
 		},
 	}
 
