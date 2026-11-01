@@ -166,8 +166,8 @@ Only the following exists in the code today.
     directory is judged by its target.
   - The access check looks at the mode and not at the owner, so a directory
     owned by another user passes when its mode is 0700. It does not check the
-    opened directory again. It does not cover the modes of anything created
-    inside the data directory, because nothing creates them yet.
+    opened directory again. It does not cover the modes of the database files
+    and the directories that later steps create inside the data directory.
   - The lock builds on unix platforms only, because it uses `syscall.Flock`.
     Nothing calls it yet.
   - Every other test of the package skips until the code it needs exists, so
