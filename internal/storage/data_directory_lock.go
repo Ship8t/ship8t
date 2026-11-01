@@ -13,6 +13,9 @@ import (
 // ADR 0003 lays it out.
 const lockFileName = "lock"
 
+// groupOtherAccess holds the permission bits that let group or other use a file.
+const groupOtherAccess fs.FileMode = 0o077
+
 // DataDirectoryLock is the exclusive lock on a data directory. Hold it for the
 // life of the server, so two server processes never share the directory.
 type DataDirectoryLock struct {
@@ -63,10 +66,11 @@ func (lock *DataDirectoryLock) Release() error {
 	return nil
 }
 
-// checkDataDirectory accepts an existing directory and rejects an empty path, a
-// missing directory, and a path that is not a directory, each with an error that
-// names the fix. It checks the path itself, because os.OpenRoot reports a file
-// as a plain "not a directory" text that no code can match.
+// checkDataDirectory accepts an existing directory that only its owner can use.
+// It rejects an empty path, a missing directory, a path that is not a directory,
+// and a directory that group or other can use, in that order, each with an error
+// that names the fix. It checks the path itself, because os.OpenRoot reports a
+// file as a plain "not a directory" text that no code can match.
 func checkDataDirectory(dataDirectory string) error {
 	// Reject an empty path, because the system reports it as a missing file
 	// and that would hide a caller that forgot to set the directory.
@@ -85,7 +89,26 @@ func checkDataDirectory(dataDirectory string) error {
 	if err != nil {
 		return fmt.Errorf("lock data directory: %w", err)
 	}
-	return nil
+	return checkDataDirectoryAccess(info, dataDirectory)
+}
+
+// checkDataDirectoryAccess rejects a directory that group or other can use,
+// because it holds the database and the lock file, and a symlink put in place of
+// the lock entry needs write access to the directory. It reads the mode of the
+// directory that the path leads to, so a symlinked data directory is judged by
+// its target. It does not check the opened directory again, because a swap
+// between the check and the open needs write access to a parent of the path.
+func checkDataDirectoryAccess(info fs.FileInfo, dataDirectory string) error {
+	mode := info.Mode().Perm()
+	if mode&groupOtherAccess == 0 {
+		return nil
+	}
+
+	// Keep the message on one line, so a path cannot forge a second one.
+	if command, ok := chmodCommand(dataDirectory); ok {
+		return fmt.Errorf("data directory can be used by group or other, mode %04o, run: %s", mode, command)
+	}
+	return fmt.Errorf("data directory %q can be used by group or other, mode %04o, run chmod 700 on that directory", dataDirectory, mode)
 }
 
 // checkLockEntry accepts a missing lock entry or a regular file and rejects

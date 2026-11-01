@@ -10,6 +10,19 @@ import (
 	"testing"
 )
 
+// privateTestDirectory returns a temporary directory that only its owner can
+// use, because the lock refuses a directory that group or other can use and
+// t.TempDir follows the umask.
+func privateTestDirectory(t *testing.T) string {
+	t.Helper()
+
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatalf("chmod test directory: %v", err)
+	}
+	return directory
+}
+
 // lockTestDataDirectory locks a data directory and stops the test when it
 // cannot. The test releases the lock itself.
 func lockTestDataDirectory(t *testing.T, dataDirectory string) *DataDirectoryLock {
@@ -23,7 +36,7 @@ func lockTestDataDirectory(t *testing.T, dataDirectory string) *DataDirectoryLoc
 }
 
 func TestLockDataDirectoryExcludesSecondLock(t *testing.T) {
-	dataDirectory := t.TempDir()
+	dataDirectory := privateTestDirectory(t)
 	first := lockTestDataDirectory(t, dataDirectory)
 
 	second, err := LockDataDirectory(dataDirectory)
@@ -45,7 +58,7 @@ func TestLockDataDirectoryExcludesSecondLock(t *testing.T) {
 }
 
 func TestLockDataDirectoryAllowsLockAfterRelease(t *testing.T) {
-	dataDirectory := t.TempDir()
+	dataDirectory := privateTestDirectory(t)
 
 	first := lockTestDataDirectory(t, dataDirectory)
 	if err := first.Release(); err != nil {
@@ -162,7 +175,7 @@ func TestLockDataDirectoryRejectsLockEntryThatIsNotARegularFile(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			dataDirectory := t.TempDir()
+			dataDirectory := privateTestDirectory(t)
 			test.make(t, dataDirectory)
 
 			lock, err := LockDataDirectory(dataDirectory)
@@ -181,7 +194,7 @@ func TestLockDataDirectoryRejectsLockEntryThatIsNotARegularFile(t *testing.T) {
 }
 
 func TestLockDataDirectoryDoesNotCreateFileThroughSymlink(t *testing.T) {
-	dataDirectory := t.TempDir()
+	dataDirectory := privateTestDirectory(t)
 	if err := os.Symlink("nowhere", filepath.Join(dataDirectory, "lock")); err != nil {
 		t.Fatalf("make symlink: %v", err)
 	}
@@ -199,7 +212,7 @@ func TestLockDataDirectoryDoesNotCreateFileThroughSymlink(t *testing.T) {
 }
 
 func TestLockDataDirectoryCreatesPrivateLockFile(t *testing.T) {
-	dataDirectory := t.TempDir()
+	dataDirectory := privateTestDirectory(t)
 	lock := lockTestDataDirectory(t, dataDirectory)
 	defer func() {
 		if err := lock.Release(); err != nil {
@@ -220,7 +233,7 @@ func TestLockDataDirectoryCreatesPrivateLockFile(t *testing.T) {
 }
 
 func TestLockDataDirectoryKeepsModeOfExistingLockFile(t *testing.T) {
-	dataDirectory := t.TempDir()
+	dataDirectory := privateTestDirectory(t)
 	path := filepath.Join(dataDirectory, "lock")
 	if err := os.WriteFile(path, nil, 0o600); err != nil {
 		t.Fatalf("write lock file: %v", err)
@@ -257,7 +270,7 @@ func TestLockDataDirectoryWritesNothingToLockFile(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			dataDirectory := t.TempDir()
+			dataDirectory := privateTestDirectory(t)
 			path := filepath.Join(dataDirectory, "lock")
 			if test.existingContent != "" {
 				if err := os.WriteFile(path, []byte(test.existingContent), 0o600); err != nil {
@@ -282,7 +295,7 @@ func TestLockDataDirectoryWritesNothingToLockFile(t *testing.T) {
 }
 
 func TestLockDataDirectoryFollowsSymlinkedDirectory(t *testing.T) {
-	realDirectory := t.TempDir()
+	realDirectory := privateTestDirectory(t)
 	linkedDirectory := filepath.Join(t.TempDir(), "linked")
 	if err := os.Symlink(realDirectory, linkedDirectory); err != nil {
 		t.Fatalf("make symlink: %v", err)
@@ -317,8 +330,8 @@ func TestLockDataDirectoryDoesNotCreateMissingDirectory(t *testing.T) {
 }
 
 func TestLockDataDirectoryKeepsDirectoriesIndependent(t *testing.T) {
-	firstDirectory := t.TempDir()
-	secondDirectory := t.TempDir()
+	firstDirectory := privateTestDirectory(t)
+	secondDirectory := privateTestDirectory(t)
 
 	first := lockTestDataDirectory(t, firstDirectory)
 	second := lockTestDataDirectory(t, secondDirectory)
