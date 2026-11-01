@@ -37,26 +37,29 @@ func TestShellQuoteRoundTripsThroughShell(t *testing.T) {
 func TestChmodCommand(t *testing.T) {
 	tests := []struct {
 		name        string
+		mode        string
 		path        string
 		wantCommand string
 		wantOK      bool
 	}{
-		{name: "plain path", path: "/srv/ship8t", wantCommand: "chmod -- 700 '/srv/ship8t'", wantOK: true},
-		{name: "relative path with a dash", path: "-data", wantCommand: "chmod -- 700 '-data'", wantOK: true},
-		{name: "single quote", path: "/srv/it's", wantCommand: `chmod -- 700 '/srv/it'\''s'`, wantOK: true},
-		{name: "non ASCII printable", path: "/srv/données", wantCommand: "chmod -- 700 '/srv/données'", wantOK: true},
-		{name: "newline", path: "/srv/a\nb"},
-		{name: "escape", path: "/srv/a\x1bb"},
-		{name: "right to left override", path: "/srv/a\u202eb"},
-		{name: "invalid UTF-8", path: "/srv/a\xffb"},
-		{name: "no break space", path: "/srv/a\u00a0b"},
+		{name: "plain path", mode: "700", path: "/srv/ship8t", wantCommand: "chmod -- 700 '/srv/ship8t'", wantOK: true},
+		{name: "relative path with a dash", mode: "700", path: "-data", wantCommand: "chmod -- 700 '-data'", wantOK: true},
+		{name: "single quote", mode: "700", path: "/srv/it's", wantCommand: `chmod -- 700 '/srv/it'\''s'`, wantOK: true},
+		{name: "non ASCII printable", mode: "700", path: "/srv/données", wantCommand: "chmod -- 700 '/srv/données'", wantOK: true},
+		{name: "file mode", mode: "600", path: "/srv/ship8t/ship8t.db", wantCommand: "chmod -- 600 '/srv/ship8t/ship8t.db'", wantOK: true},
+		{name: "file mode with a control character", mode: "600", path: "/srv/a\nb"},
+		{name: "newline", mode: "700", path: "/srv/a\nb"},
+		{name: "escape", mode: "700", path: "/srv/a\x1bb"},
+		{name: "right to left override", mode: "700", path: "/srv/a\u202eb"},
+		{name: "invalid UTF-8", mode: "700", path: "/srv/a\xffb"},
+		{name: "no break space", mode: "700", path: "/srv/a\u00a0b"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			command, ok := chmodCommand(test.path)
+			command, ok := chmodCommand(test.mode, test.path)
 			if ok != test.wantOK || command != test.wantCommand {
-				t.Errorf("chmodCommand(%q) = %q, %v, want %q, %v", test.path, command, ok, test.wantCommand, test.wantOK)
+				t.Errorf("chmodCommand(%q, %q) = %q, %v, want %q, %v", test.mode, test.path, command, ok, test.wantCommand, test.wantOK)
 			}
 		})
 	}
