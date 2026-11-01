@@ -94,12 +94,13 @@ func checkDataDirectory(dataDirectory string) error {
 
 // checkDirectoryAccess rejects a directory that group or other can use. The data
 // directory holds the database and the lock file, and a symlink put in place of
-// the lock entry needs write access to it. The entries inside hold the releases,
-// so they get the same rule. It reads the mode of the directory that the path
-// leads to, so a symlinked data directory is judged by its target. It does not
-// check the opened directory again, because a swap between the check and the
-// open needs write access to a parent of the path. The description starts the
-// message, such as "data directory".
+// the lock entry needs write access to it. The entries inside hold the projects,
+// the quarantine, and the releases being pruned, so they get the same rule. It
+// reads the mode of the directory that the path leads to, so a symlinked data
+// directory is judged by its target. It does not check the opened directory
+// again, because a swap between the check and the open needs write access to a
+// parent of the path. The description starts the message, such as "data
+// directory".
 func checkDirectoryAccess(info fs.FileInfo, path, description string) error {
 	mode := info.Mode().Perm()
 	if mode&groupOtherAccess == 0 {

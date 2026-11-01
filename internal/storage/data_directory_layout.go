@@ -44,8 +44,8 @@ func CreateDataDirectoryLayout(dataDirectory string) error {
 		if err := root.Mkdir(name, 0o700); err != nil {
 			return fmt.Errorf("create data directory layout: %w", err)
 		}
-		// Set the mode apart from the mkdir, because the umask limits a new
-		// directory but never the mode that ADR 0003 asks for.
+		// Set the mode apart from the mkdir, because the umask can clear bits of
+		// a new directory and chmod is not subject to it.
 		if err := root.Chmod(name, 0o700); err != nil {
 			return fmt.Errorf("create data directory layout: %w", err)
 		}
