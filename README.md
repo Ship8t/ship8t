@@ -10,8 +10,8 @@ and documented, but almost none of it is built yet.
 
 ## Current state
 
-The code covers only the start of v1. The file
-[docs/current-state.md](docs/current-state.md) lists what exists, package by
+The code covers only the start of v1. See
+[docs/current-state.md](docs/current-state.md) for what exists, package by
 package.
 
 Deploying, rollback, the server, authentication, and all of storage except
@@ -21,8 +21,8 @@ not exist yet.
 
 ## Project structure
 
-Each line says where the part stands today. The file
-[docs/current-state.md](docs/current-state.md) has the detail.
+Each line says where the part stands today. See
+[docs/current-state.md](docs/current-state.md) for the detail.
 
 - `cmd/ship8t` is the client entry point. It accepts `version` and `help` only.
 - `cmd/ship8td` is the server entry point. It accepts `version` and `help`
@@ -51,7 +51,7 @@ Each line says where the part stands today. The file
   `docs/go-quality.md` has the Go rules.
 - `.github/workflows` holds the GitHub Actions workflows. `ci.yml` runs the
   checks on Linux and macOS and `make vuln` on Linux. `codeql.yml` runs CodeQL,
-  and `assign.yml` assigns new issues and pull requests to the maintainer.
+  and `assign.yml` assigns new issues and pull requests to me.
 - `Makefile` holds the build, test, and analysis targets.
 - `CONTRIBUTING.md` explains how to contribute. `AGENTS.md` and `CLAUDE.md` hold
   the rules for AI coding agents. `LICENSE` is the Apache License 2.0.
@@ -102,9 +102,9 @@ Go 1.26 or newer is required. These targets exist in the `Makefile`.
 To try what exists today, run `make build`, then `bin/ship8t version` or
 `bin/ship8td help`. These are the only commands. Any other command prints the
 usage text to standard error and exits with code 2. A build inside a Git
-checkout shows the commit as its version, and any other build shows `dev`. The
-file [CONTRIBUTING.md](CONTRIBUTING.md) lists the checks to run before a pull
-request and how to run the fuzz tests.
+checkout shows the commit as its version, and any other build shows `dev`. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the checks to run before a pull request
+and how to run the fuzz tests.
 
 ## License
 
