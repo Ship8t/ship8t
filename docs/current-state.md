@@ -129,6 +129,23 @@ Only the following exists in the code today.
   - `Open` takes the path of the database file, creates it when it is missing,
     and returns a `Database`. `Close` closes it. The driver is the pure Go
     `modernc.org/sqlite`, so no C toolchain is needed.
+  - `Open` creates a missing database file empty with mode 0600 before SQLite
+    opens it, so the umask cannot loosen it. It sets the mode with `chmod`, so a
+    umask that clears the owner bits does not change it either. SQLite gives
+    `-wal` and `-shm` the mode of the main file, so all three are private. It
+    opens the parent directory through `os.Root`, so a missing parent directory
+    fails with the operating system error.
+  - `Open` refuses an existing `ship8t.db`, `-wal`, or `-shm` that group or
+    other can use, and does not fix it. The error holds the `chmod -- 600`
+    command with the quoted path of that file on one line. It omits the command
+    and quotes the path when the path has a control or unprintable character. A
+    loose `-wal` or `-shm` is refused whatever its size, because a crash can
+    leave one with the mode of an earlier run.
+  - `Open` also refuses a symlink and any other entry that is not a regular
+    file at any of the three names, because SQLite follows a symlink and would
+    create its target. It checks the entries with `Lstat` before it creates the
+    file, so a refused open creates nothing. It checks the mode and not the
+    owner, and it does not check the files again after the open.
   - `Open` sets the journal mode to WAL, `synchronous` to `FULL`, foreign keys
     on, and a busy timeout of 5 seconds, and it uses one connection, so
     transactions run one at a time. The settings are part of the connection
@@ -138,8 +155,8 @@ Only the following exists in the code today.
   - `Open` makes a relative path absolute. It rejects an empty path and a path
     with a NUL byte, because SQLite would cut the name there and open another
     file.
-  - The database has no tables yet. `Open` does not create the data directory,
-    take the lock, or set a file mode.
+  - The database has no tables yet. `Open` does not create the data directory
+    or take the lock.
   - `LockDataDirectory` takes the exclusive lock on a data directory and returns
     a `DataDirectoryLock`. `Release` gives the lock up. A server holds the lock
     for its whole life, so two server processes never share a directory.
@@ -166,8 +183,9 @@ Only the following exists in the code today.
     directory is judged by its target.
   - The access check looks at the mode and not at the owner, so a directory
     owned by another user passes when its mode is 0700. It does not check the
-    opened directory again. It does not cover the modes of the database files
-    and the directories that later steps create inside the data directory.
+    opened directory again. It does not cover the modes of the database files,
+    which `Open` checks, or of the directories that later steps create inside
+    the data directory.
   - The lock builds on unix platforms only, because it uses `syscall.Flock`.
     Nothing calls it yet.
   - `CreateDataDirectoryLayout` makes `projects/`, `quarantine/`, and
@@ -185,8 +203,8 @@ Only the following exists in the code today.
     directory, it omits the command and quotes the path when the path has a
     control or unprintable character.
   - It leaves an existing directory and its content alone, so a repeat is safe.
-    It does not check that `pruning/` and `projects/` share a filesystem, and
-    nothing sets the mode of `ship8t.db`. Nothing calls it yet.
+    It does not check that `pruning/` and `projects/` share a filesystem.
+    Nothing calls it yet.
   - The tests for `Open`, the lock, the access rule, and the layout run and
     pass. Only the cases listed below skip until the code they need exists, so
     none of them checks anything today.

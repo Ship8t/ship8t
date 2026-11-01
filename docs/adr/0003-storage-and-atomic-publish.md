@@ -295,3 +295,35 @@ SQLite transactions are atomic.
   `ship8td serve` owns that order, and nothing calls the layout yet. This entry
   does not check that `pruning/` and `projects/` share a filesystem, and it does
   not set the mode of `ship8t.db` and its journal files. Each is its own step.
+- 2026-11-01. Clarified how the server keeps the database files private while
+  building `internal/storage`, without changing a decision. The database holds
+  token hashes, so give `ship8t.db`, `ship8t.db-wal`, and `ship8t.db-shm` mode
+  0600, as the rule of `docs/go-quality.md` for a file that holds secrets asks.
+  Create a missing `ship8t.db` empty with mode 0600 through `os.Root` before
+  SQLite opens it, and set the mode with `chmod` after the create. The driver
+  creates the file with mode 0644 under the umask, and a umask can clear owner
+  bits. SQLite gives `-wal` and `-shm` the mode of the main file, so one private
+  file covers all three. A probe of `modernc.org/sqlite` v1.61.1 on Go 1.26.0
+  and 1.27.3 showed both. Create the file with `O_EXCL`, so a symlink at the
+  path is not followed. Look at `ship8t.db`, `-wal`, and `-shm` with `Lstat`
+  before the create, and check all three before making any, so a refused open
+  creates nothing. Refuse an entry that is not a regular file, because SQLite
+  follows a symlink at the path and would create the target of a dangling one.
+  Refuse an existing file with any permission bit of group or other set. Put the
+  `chmod -- 600` command with the quoted path of that file in the error on one
+  line, and show the quoted path with no command when the path has a control or
+  unprintable character, as the errors for the data directory do. Refuse and do
+  not fix, because a silent fix hides that something else changed the mode, and
+  others may have read the file already. Check `-wal` and `-shm` as well,
+  because a crash leaves them with the mode of an earlier run, and a probe
+  showed that a leftover `-wal` with content kept mode 0644 while the main file
+  was 0600. Refuse a loose one whatever its size, because the check reads
+  neither size nor content, and no release exists yet that could have left one.
+  Check the mode and not the owner, as for the data directory. Do not check the
+  files again between the check and the create. A swap needs write access to the
+  data directory, which the access rule keeps private, and `O_EXCL` stops the
+  create from following a symlink. No test can force that swap without a seam.
+  Open the parent directory with `os.Root`, so a missing parent directory fails
+  with the operating system error and no longer with the SQLite text. This entry
+  does not check that `pruning/` and `projects/` share a filesystem, and it does
+  not check the mode of a file again after the open.
