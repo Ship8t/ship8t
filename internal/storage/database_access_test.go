@@ -11,6 +11,12 @@ import (
 	"testing"
 )
 
+// testDatabaseFileSuffixes lists the three files that SQLite keeps for one
+// database, written out here and not taken from the code under test, so a file
+// that the code stops checking has a case that fails. The empty suffix is the
+// main file.
+var testDatabaseFileSuffixes = []string{"", "-wal", "-shm"}
+
 // writeTestFile makes a file with the exact mode, set with chmod so the umask
 // does not change it.
 func writeTestFile(t *testing.T, path string, mode os.FileMode) {
@@ -27,7 +33,7 @@ func writeTestFile(t *testing.T, path string, mode os.FileMode) {
 func TestOpenRefusesDatabaseFileThatOthersCanAccess(t *testing.T) {
 	modes := []os.FileMode{0o644, 0o640, 0o604, 0o660, 0o666, 0o601, 0o610, 0o620}
 
-	for _, suffix := range databaseFileSuffixes {
+	for _, suffix := range testDatabaseFileSuffixes {
 		for _, mode := range modes {
 			t.Run(fmt.Sprintf("ship8t.db%s %04o", suffix, mode), func(t *testing.T) {
 				directory := privateTestDirectory(t)
@@ -91,7 +97,7 @@ func TestOpenNamesTheLooseFileAmongOwnerOnlyFiles(t *testing.T) {
 func TestOpenAcceptsExistingOwnerOnlyFiles(t *testing.T) {
 	directory := privateTestDirectory(t)
 	path := filepath.Join(directory, "ship8t.db")
-	for _, suffix := range databaseFileSuffixes {
+	for _, suffix := range testDatabaseFileSuffixes {
 		writeTestFile(t, path+suffix, 0o600)
 	}
 
@@ -144,7 +150,7 @@ func TestOpenRefusesDatabaseEntryThatIsNotARegularFile(t *testing.T) {
 		},
 	}
 
-	for _, suffix := range databaseFileSuffixes {
+	for _, suffix := range testDatabaseFileSuffixes {
 		for _, kind := range kinds {
 			t.Run(fmt.Sprintf("ship8t.db%s %s", suffix, kind.name), func(t *testing.T) {
 				directory := privateTestDirectory(t)
