@@ -553,3 +553,23 @@ docs/adr/          architecture decisions
   packages is built, tests included, on darwin or linux. Re-check that after
   every upgrade. The count of direct dependencies is now two, as section 9
   allows.
+- 2026-11-02. Recorded three packages that section 9 does not list, without
+  changing a decision. Section 9 says to split packages only at real boundaries
+  and names manifest validation, scanning, client transport, storage, the
+  deployment state machine, and site serving. Three packages exist beyond that
+  list, and each sits at a real boundary of the same kind. `internal/config`
+  reads and validates `ship8t.json` and the per-user config of section 6, and it
+  holds the rules for the environment variables and the order of the sources, so
+  the files, the variables, and the flags meet in one place that is not client
+  transport. `internal/strictjson` is the strict JSON object decoder that
+  `internal/manifest` and `internal/config` share. It rejects a field name with
+  the wrong case, a repeated field name, and data after the object in one place,
+  so the manifest and both config files follow one rule and no copy can drift.
+  `internal/version` reports the build version that `ship8t version` and
+  `ship8td version` print, taken from a build-time stamp, then the module
+  version, then `dev`. Both binaries use it, so it cannot live in either.
+  Section 9 names the boundaries that were known when it was written and is not
+  a closed list. All three stay under `internal/`, so v1 still promises no Go
+  library API. None adds a dependency, and the count of direct dependencies
+  stays at two. The maintainer approved `internal/strictjson` as a shared
+  package before it was built.
