@@ -32,3 +32,25 @@ func newDeploymentID(now time.Time) (string, error) {
 	_, _ = rand.Read(random[:])
 	return fmt.Sprintf("%012x%x", milliseconds, random), nil
 }
+
+// errDeploymentIDShape reports an ID that has the wrong shape. It never repeats
+// the value, because the value comes from the caller.
+var errDeploymentIDShape = errors.New("deployment ID must be 32 lowercase hexadecimal characters")
+
+// validateDeploymentID rejects an ID that is not 32 lowercase hexadecimal
+// characters, the shape of ADR 0003. It runs before the ID reaches a query, and
+// the deployments table holds the same rule as a backstop.
+func validateDeploymentID(id string) error {
+	if len(id) != 32 {
+		return errDeploymentIDShape
+	}
+	for index := 0; index < len(id); index++ {
+		character := id[index]
+		isDigit := character >= '0' && character <= '9'
+		isLowercaseHexLetter := character >= 'a' && character <= 'f'
+		if !isDigit && !isLowercaseHexLetter {
+			return errDeploymentIDShape
+		}
+	}
+	return nil
+}
