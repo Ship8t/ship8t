@@ -445,3 +445,41 @@ SQLite transactions are atomic.
   a mount, so no test shows that the comparison refuses an entry. A failed
   `chmod` of a new directory and a failed commit need a seam, so no test forces
   them.
+- 2026-11-05. Clarified how the server creates a deployment while building
+  `internal/storage`, without changing a decision. Reverse the reading of the
+  schema entry of 2026-11-01 that put no CHECK on the deployment ID. That entry
+  waited for code to give the ID a shape, and deployment creation is that code.
+  Give the ID the time-sortable random shape that this ADR asks for, which is 32
+  lowercase hexadecimal characters. The first 12 hold the milliseconds since the
+  Unix epoch and the last 20 hold 80 random bits from `crypto/rand`. A CHECK on
+  `deployments.id` holds the shape as a backstop, with the byte length term that
+  rejects a NUL byte, because the ID becomes a directory name under `staging/`
+  and `releases/`. Add the column `updated_at`, an integer of Unix seconds,
+  because the idle timeout of ADR 0002 counts from the last activity. Add no
+  `created_at`, because the ID holds the creation time. Version 1 grows in place
+  as the entry of 2026-11-01 says, so a development database made before this
+  entry still says version 1, and the operator deletes it. This is the first use
+  of `crypto/rand`, which `docs/go-quality.md` asks for. Ignore the error of
+  `Read`, because it never returns one since Go 1.24 and ADR 0005 sets Go 1.26
+  as the minimum. Fail when the clock reads before 1970 or after the largest
+  time that 12 characters hold, with an error that says to check the date of the
+  server, because the CHECK would refuse such an ID without saying why. Create a
+  deployment with `CreateDeployment`, which checks the project ID against the
+  slug rule, validates the manifest again against the limits of ADR 0004 because
+  the server never trusts the client, and stores the canonical JSON of the
+  validated manifest. Check, in one plain transaction, that the project exists,
+  count the project's deployments in the `created` and `uploading` states,
+  refuse when the count has reached the limit that the caller passes, and insert
+  the row in the `created` state. Read an unfinished deployment as one in the
+  two states of ADR 0002 before finalization. Take the limit as a parameter,
+  because ADR 0004 makes it configurable. The code that reads the setting checks
+  that it is positive, so a value of zero or less refuses every call and fails
+  closed. Make no directory, because ADR 0002 says that `created` means no
+  content has been accepted, so the first upload makes `staging/<id>`. Accept
+  these limits. A repeat of a call makes a second deployment, because the
+  idempotency key of ADR 0004 does not exist yet. No test forces a failed commit
+  or a clock outside the range inside `CreateDeployment`, because each needs a
+  seam. A test cannot tell which step of the transaction used a cancelled
+  context, because the first step fails. The count reads the state constants of
+  `internal/deployment`, so a new state needs a look at the count and at the
+  CHECK of the schema.
