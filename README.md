@@ -26,9 +26,10 @@ not exist yet.
 Each line says where the part stands today. See
 [docs/current-state.md](docs/current-state.md) for the detail.
 
-- `cmd/ship8t` is the client entry point. It accepts `version` and `help` only.
+- `cmd/ship8t` is the client entry point. It accepts `version` and `help` only,
+  and `--help` and `-h` mean `help`.
 - `cmd/ship8td` is the server entry point. It accepts `version` and `help`
-  only.
+  only, and `--help` and `-h` mean `help`.
 - `internal/version` reports the build version for both binaries. Done.
 - `internal/manifest` validates and decodes deployment manifests for the client
   and the server. Done. Only the scanner uses it.
@@ -105,8 +106,12 @@ Go 1.26 or newer is required. These targets exist in the `Makefile`.
 
 To try what exists today, run `make build`, then `bin/ship8t version` or
 `bin/ship8td help`. These are the only commands. Any other command prints the
-usage text to standard error and exits with code 2. A build inside a Git
-checkout shows the commit as its version, and any other build shows `dev`. See
+usage text to standard error and exits with code 2. `make build` stamps the
+output of `git describe --tags --always --dirty` as the version, so a checkout
+without tags shows the short commit. A build outside Git shows `dev`. Without a
+stamp the version comes from the Go build info, and a plain `go build` in a
+checkout prints a pseudo version such as
+`v0.0.0-20261105091002-08bc6449b6e8+dirty`. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the checks to run before a pull request
 and how to run the fuzz tests.
 
