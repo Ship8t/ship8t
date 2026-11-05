@@ -29,7 +29,7 @@ Only the following exists in the code today.
     10,000 files, 50 MiB per file, and 500 MiB in total.
   - `Validate` applies the same rules and limits to a manifest that code builds
     in memory.
-  - Only `internal/scan` uses it. No command or server code uses it yet.
+  - `internal/scan` and `internal/storage` use it. No command uses it yet.
 - `internal/scan` lists the files of a deploy directory and describes them as
   manifest entries. No command uses it yet.
   - `Scan` reads a directory through `os.Root` and returns the sorted,
@@ -109,7 +109,8 @@ Only the following exists in the code today.
   decoders. It rejects unknown fields, names with the wrong case, repeated
   names, and data after the object.
 - `internal/deployment` defines the seven deployment states of ADR 0002 and
-  checks a move between two of them. No command or server code uses it yet.
+  checks a move between two of them. `internal/storage` uses its state
+  constants, and no code calls `Transition` yet.
   - `Transition` allows the ten moves that the ADR lists, such as `created` to
     `uploading` and `ready` to `pruned`. It rejects every other move with
     `ErrStateConflict`, which the server will answer with `409 state_conflict`.
@@ -126,8 +127,8 @@ Only the following exists in the code today.
     describes the files and decodes the manifest as the server will.
 - `internal/storage` opens the SQLite database, creates its first tables, locks
   the data directory, makes its directories, adds a project with its
-  directories, and holds skipped tests for the rest of storage. No command or
-  server code uses it yet.
+  directories, adds a deployment from a manifest, and holds skipped tests for
+  the rest of storage. No command or server code uses it yet.
   - `Open` takes the path of the database file, creates it when it is missing,
     and returns a `Database`. `Close` closes it. The driver is the pure Go
     `modernc.org/sqlite`, so no C toolchain is needed.
@@ -172,14 +173,19 @@ Only the following exists in the code today.
   - Version 1 has two tables, both `STRICT`. `projects` holds the ID, which a
     CHECK limits to a slug of 1 to 63 bytes of lowercase letters, digits, and
     hyphens with no leading or trailing hyphen. The CHECK rejects a NUL byte.
-  - `deployments` holds the ID, the project ID, the state, and the manifest as
-    text. The project ID is a foreign key to `projects` with `ON DELETE
-    RESTRICT`, so a project with a deployment cannot be deleted. A CHECK limits
-    the state to the seven states of ADR 0002.
-  - No rule limits the deployment ID or the size of the manifest. The tables
-    have no timestamps and no active pointer, and there are no tables for files,
-    tokens, the activation log, or idempotency keys yet. Only `CreateProject`
-    writes a row, and it writes to `projects`.
+  - `deployments` holds the ID, the project ID, the state, the manifest as
+    text, and `updated_at`, the time of the last activity in Unix seconds. The
+    project ID is a foreign key to `projects` with `ON DELETE RESTRICT`, so a
+    project with a deployment cannot be deleted. A CHECK limits the state to the
+    seven states of ADR 0002.
+  - A CHECK limits the deployment ID to 32 bytes of lowercase hexadecimal
+    characters and rejects a NUL byte, because the ID becomes a directory name.
+    The ID holds the creation time, so there is no `created_at`. No rule limits
+    the size of the manifest, because `Decode` owns that limit.
+  - The tables have no active pointer, and there are no tables for files,
+    tokens, the activation log, or idempotency keys yet. `CreateProject` writes
+    to `projects` and `CreateDeployment` writes to `deployments`. No code
+    updates `updated_at` after the insert.
   - Version 1 grows with each table until the first release. A development
     database from an earlier step still says version 1, so delete it by hand.
     There is no migration.
@@ -286,10 +292,42 @@ Only the following exists in the code today.
     them.
   - The data directory is a parameter that nothing ties to the database file, so
     the caller must pass the one that holds `ship8t.db`.
+  - `CreateDeployment` adds a deployment in the `created` state to a project and
+    returns its ID. Call it after `EnsureSchema` and `CreateProject`. It takes
+    the context, the project ID, a decoded manifest, the manifest limits, and
+    the number of unfinished deployments that a project may hold. The manifest
+    must come from `manifest.Decode` or be built by code that validates it, and
+    it must not be nil. Nothing calls it yet.
+  - The ID has 32 lowercase hexadecimal characters. The first 12 hold the
+    milliseconds since the Unix epoch and the last 20 hold 80 random bits from
+    `crypto/rand`, so IDs sort by the millisecond that made them and the order
+    inside one millisecond is random. A clock before 1970 or after the largest
+    time that 12 characters hold fails with `system clock is outside the
+    supported range, so check the date of the server`.
+  - It checks the project ID against the slug rule before anything else, and it
+    validates the manifest again against the limits that the caller passes,
+    because the server never trusts the caller. It stores the canonical JSON of
+    the manifest. An error of the manifest wraps `manifest.ErrLimitExceeded` or
+    `manifest.ErrUnsupportedVersion` where those apply, so a caller can tell the
+    kinds apart.
+  - One plain transaction checks that the project exists, counts the project's
+    deployments in the `created` and `uploading` states, and inserts the row. A
+    missing project fails with `project "<id>" does not exist, so create it
+    first`. A project at the limit fails with `project "<id>" has <count>
+    unfinished deployments and the limit is <max>, so finish or cancel one
+    first`. A limit of zero or less refuses every call, and the code that reads
+    the setting must check it. A refusal leaves no row.
+  - It makes no directory, because `created` means that no content has been
+    accepted, and the first upload will make `staging/<id>`. A repeat of a call
+    makes a second deployment, because the idempotency key of ADR 0004 does not
+    exist yet. Nothing expires a deployment yet.
+  - No test forces a failed commit or a clock outside the range inside
+    `CreateDeployment`, because each needs a seam. A test cannot tell which step
+    of the transaction used a cancelled context, because the first step fails.
   - The tests for `Open`, the lock, the access rule, the layout, the
-    filesystem check, and project creation run and pass. Only the cases listed
-    below skip until the code they need exists, so none of them checks anything
-    today.
+    filesystem check, project creation, and deployment creation run and pass.
+    Only the cases listed below skip until the code they need exists, so none of
+    them checks anything today.
   - `TestRecoveryAfterInterruption` lists ten cases from ADR 0003. They are a
     crash before the `ready` commit, the staging directories of dead and live
     deployments, an unknown release directory, a missing release directory, an

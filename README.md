@@ -17,9 +17,9 @@ package.
 Deploying, rollback, the server, authentication, and all of storage except
 opening the database, creating its first two tables, locking the data
 directory, making its top level directories, checking that two of them share a
-filesystem, and adding a project with its directories are not implemented. No
-command reads a configuration file yet. The commands described in the ADRs do
-not exist yet.
+filesystem, adding a project with its directories, and adding a deployment from
+a manifest are not implemented. No command reads a configuration file yet. The
+commands described in the ADRs do not exist yet.
 
 ## Project structure
 
@@ -32,7 +32,7 @@ Each line says where the part stands today. See
   only, and `--help` and `-h` mean `help`.
 - `internal/version` reports the build version for both binaries. Done.
 - `internal/manifest` validates and decodes deployment manifests for the client
-  and the server. Done. Only the scanner uses it.
+  and the server. Done. The scanner and `internal/storage` use it.
 - `internal/scan` lists the files of a deploy directory, applies the ignore
   rules, detects secrets, and describes the files for a manifest. Done. No
   command calls it yet.
@@ -42,13 +42,15 @@ Each line says where the part stands today. See
 - `internal/strictjson` decodes JSON objects strictly for the manifest and the
   config files. Done.
 - `internal/deployment` defines the deployment states and checks the moves
-  between them. The check is done, and nothing stores a state yet.
+  between them. The check is done, and no code calls it yet. Storage uses the
+  states.
 - `internal/storage` will own the data directory of the server. It opens the
   SQLite database, creates the `projects` and `deployments` tables, locks the
   data directory, makes its top level directories, checks that `projects/` and
-  `pruning/` share a filesystem, and adds a project with its directories. The
-  other tables, deployments, activation, and recovery are still to build, and
-  skipped tests mark the recovery, concurrency, and pruning cases.
+  `pruning/` share a filesystem, adds a project with its directories, and adds
+  a deployment from a manifest. The other tables, uploads, activation, and
+  recovery are still to build, and skipped tests mark the recovery,
+  concurrency, and pruning cases.
 - `internal/e2e` holds the end-to-end test of the deploy and rollback flow. One
   of its seven stages runs.
 - `docs` holds the documentation. `docs/adr` has the architecture decision
@@ -136,13 +138,14 @@ Done.
 Next, storage and the state machine.
 
 - [ ] Deployment state machine. `internal/deployment` checks a move between two
-  states, and nothing stores a state yet. Persisted states, activation, and
-  history do not exist yet.
+  states. Storage creates a deployment in the created state, and no code moves
+  a stored state yet. Activation and history do not exist yet.
 - [ ] Storage. `internal/storage` opens the SQLite database with the settings of
   ADR 0003, creates the `projects` and `deployments` tables, locks the data
   directory, makes its top level directories, checks that `projects/` and
-  `pruning/` share a filesystem, and adds a project with its directories. The
-  other tables, deployments, and the file handling do not exist yet.
+  `pruning/` share a filesystem, adds a project with its directories, and adds
+  a deployment from a manifest. The other tables, uploads, and the file
+  handling do not exist yet.
 - [ ] Atomic activation, history, and crash recovery.
 - [ ] Retention and cleanup.
 
