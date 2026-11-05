@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -255,9 +256,18 @@ func ensureTestSchema(t *testing.T) *Database {
 	return database
 }
 
-// insertDeploymentTest adds a deployment with the given values, which may be nil.
+// deploymentIDTest and otherDeploymentIDTest are two deployment IDs of the shape
+// that the table accepts, which is 32 lowercase hexadecimal characters. Between
+// them they hold the first and the last character of both ranges of the shape.
+const (
+	deploymentIDTest      = "0123456789abcdef0123456789abcdef"
+	otherDeploymentIDTest = "fedcba9876543210fedcba9876543210"
+)
+
+// insertDeploymentTest adds a deployment with the given values, which may be
+// nil, and with an update time of 1.
 func insertDeploymentTest(ctx context.Context, database *Database, id, projectID, state, manifest any) error {
-	_, err := database.connection.ExecContext(ctx, "INSERT INTO deployments (id, project_id, state, manifest) VALUES (?, ?, ?, ?)", id, projectID, state, manifest)
+	_, err := database.connection.ExecContext(ctx, "INSERT INTO deployments (id, project_id, state, manifest, updated_at) VALUES (?, ?, ?, ?, 1)", id, projectID, state, manifest)
 	return err
 }
 
@@ -277,7 +287,7 @@ func TestDeploymentsTableRejectsInvalidStates(t *testing.T) {
 	database := ensureTestSchema(t)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := insertDeploymentTest(t.Context(), database, "d1", "my-site", test.state, "{}")
+			err := insertDeploymentTest(t.Context(), database, deploymentIDTest, "my-site", test.state, "{}")
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Errorf("insert with state %v error = %v, want it to contain %q", test.state, err, test.want)
 			}
@@ -300,7 +310,7 @@ func TestDeploymentsTableAcceptsEveryState(t *testing.T) {
 	database := ensureTestSchema(t)
 	for index, state := range states {
 		t.Run(string(state), func(t *testing.T) {
-			id := "deployment" + string(rune('a'+index))
+			id := fmt.Sprintf("%032x", index+1)
 			if err := insertDeploymentTest(t.Context(), database, id, "my-site", string(state), "{}"); err != nil {
 				t.Errorf("insert with state %q error = %v, want nil", state, err)
 			}
@@ -314,11 +324,11 @@ func TestDeploymentsTableAcceptsEveryState(t *testing.T) {
 func TestDeploymentsTableRequiresAnExistingProject(t *testing.T) {
 	database := ensureTestSchema(t)
 
-	err := insertDeploymentTest(t.Context(), database, "d1", "other-site", "created", "{}")
+	err := insertDeploymentTest(t.Context(), database, deploymentIDTest, "other-site", "created", "{}")
 	if err == nil || !strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
 		t.Errorf("insert for an unknown project error = %v, want a foreign key error", err)
 	}
-	err = insertDeploymentTest(t.Context(), database, "d1", nil, "created", "{}")
+	err = insertDeploymentTest(t.Context(), database, deploymentIDTest, nil, "created", "{}")
 	if err == nil || !strings.Contains(err.Error(), "NOT NULL constraint failed") {
 		t.Errorf("insert with no project error = %v, want a not null error", err)
 	}
@@ -326,7 +336,7 @@ func TestDeploymentsTableRequiresAnExistingProject(t *testing.T) {
 
 func TestDeploymentsTableKeepsTheProjectOfADeployment(t *testing.T) {
 	database := ensureTestSchema(t)
-	if err := insertDeploymentTest(t.Context(), database, "d1", "my-site", "created", "{}"); err != nil {
+	if err := insertDeploymentTest(t.Context(), database, deploymentIDTest, "my-site", "created", "{}"); err != nil {
 		t.Fatalf("insert deployment: %v", err)
 	}
 
@@ -358,12 +368,12 @@ func TestDeploymentsTableIsStrictAndNeedsAManifest(t *testing.T) {
 	if got := countTest(t, database, "SELECT strict FROM pragma_table_list WHERE name = 'deployments'"); got != 1 {
 		t.Errorf("deployments strict = %d, want 1", got)
 	}
-	err := insertDeploymentTest(t.Context(), database, "d1", "my-site", "created", nil)
+	err := insertDeploymentTest(t.Context(), database, deploymentIDTest, "my-site", "created", nil)
 	if err == nil || !strings.Contains(err.Error(), "NOT NULL constraint failed") {
 		t.Errorf("insert with no manifest error = %v, want a not null error", err)
 	}
 	// A number would be converted to text, so use a blob, which STRICT refuses.
-	err = insertDeploymentTest(t.Context(), database, "d2", "my-site", "created", []byte("{}"))
+	err = insertDeploymentTest(t.Context(), database, otherDeploymentIDTest, "my-site", "created", []byte("{}"))
 	if err == nil || !strings.Contains(err.Error(), "cannot store BLOB value in TEXT column") {
 		t.Errorf("insert of a blob as manifest error = %v, want a strict type error", err)
 	}
@@ -375,7 +385,7 @@ func TestDeploymentsTableIsStrictAndNeedsAManifest(t *testing.T) {
 
 func TestTablesRejectDuplicateIDs(t *testing.T) {
 	database := ensureTestSchema(t)
-	if err := insertDeploymentTest(t.Context(), database, "d1", "my-site", "created", "{}"); err != nil {
+	if err := insertDeploymentTest(t.Context(), database, deploymentIDTest, "my-site", "created", "{}"); err != nil {
 		t.Fatalf("insert deployment: %v", err)
 	}
 
@@ -385,13 +395,89 @@ func TestTablesRejectDuplicateIDs(t *testing.T) {
 		want      string
 	}{
 		{name: "project", statement: "INSERT INTO projects (id) VALUES ('my-site')", want: "UNIQUE constraint failed: projects.id"},
-		{name: "deployment", statement: "INSERT INTO deployments (id, project_id, state, manifest) VALUES ('d1', 'my-site', 'ready', '{}')", want: "UNIQUE constraint failed: deployments.id"},
+		{name: "deployment", statement: "INSERT INTO deployments (id, project_id, state, manifest, updated_at) VALUES ('" + deploymentIDTest + "', 'my-site', 'ready', '{}', 1)", want: "UNIQUE constraint failed: deployments.id"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := database.connection.ExecContext(t.Context(), test.statement)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Errorf("duplicate %s error = %v, want it to contain %q", test.name, err, test.want)
+			}
+		})
+	}
+}
+
+func TestDeploymentsTableRejectsInvalidIDs(t *testing.T) {
+	// A valid ID is 32 lowercase hexadecimal characters, so each case breaks one
+	// part of that rule. The cases with a bad last character sit just outside the
+	// ranges 0 to 9 and a to f, or break the character set in another way.
+	const prefix = "0123456789abcdef0123456789abcde"
+	tests := []struct {
+		name string
+		id   string
+	}{
+		{name: "empty", id: ""},
+		{name: "31 characters", id: prefix},
+		{name: "33 characters", id: prefix + "00"},
+		{name: "64 characters", id: deploymentIDTest + otherDeploymentIDTest},
+		{name: "slash below the digits", id: prefix + "/"},
+		{name: "colon above the digits", id: prefix + ":"},
+		{name: "backtick below the letters", id: prefix + "`"},
+		{name: "g above the letters", id: prefix + "g"},
+		{name: "uppercase letter", id: prefix + "F"},
+		{name: "hyphen", id: prefix + "-"},
+		{name: "space", id: prefix + " "},
+		{name: "dot dot", id: "../" + prefix[:29]},
+		{name: "nul as the last byte", id: prefix + "\x00"},
+		{name: "nul after 32 characters", id: deploymentIDTest + "\x00"},
+		{name: "multibyte character", id: prefix[:30] + "\u00e9"},
+	}
+
+	database := ensureTestSchema(t)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := insertDeploymentTest(t.Context(), database, test.id, "my-site", "created", "{}")
+			if err == nil || !strings.Contains(err.Error(), "CHECK constraint failed") {
+				t.Errorf("insert with ID %q error = %v, want a check error", test.id, err)
+			}
+		})
+	}
+	if got := countTest(t, database, "SELECT count(*) FROM deployments"); got != 0 {
+		t.Errorf("deployments after the refused inserts = %d, want 0", got)
+	}
+}
+
+func TestDeploymentsTableKeepsTheUpdateTime(t *testing.T) {
+	database := ensureTestSchema(t)
+
+	// Expect an update time of 1700000000 to come back as it went in.
+	_, err := database.connection.ExecContext(t.Context(), "INSERT INTO deployments (id, project_id, state, manifest, updated_at) VALUES (?, 'my-site', 'created', '{}', 1700000000)", deploymentIDTest)
+	if err != nil {
+		t.Fatalf("insert deployment: %v", err)
+	}
+	var updatedAt int64
+	err = database.connection.QueryRowContext(t.Context(), "SELECT updated_at FROM deployments WHERE id = ?", deploymentIDTest).Scan(&updatedAt)
+	if err != nil {
+		t.Fatalf("read the update time: %v", err)
+	}
+	if updatedAt != 1700000000 {
+		t.Errorf("updated_at = %d, want 1700000000", updatedAt)
+	}
+
+	tests := []struct {
+		name      string
+		statement string
+		want      string
+	}{
+		{name: "missing", statement: "INSERT INTO deployments (id, project_id, state, manifest) VALUES (?, 'my-site', 'created', '{}')", want: "NOT NULL constraint failed: deployments.updated_at"},
+		{name: "null", statement: "INSERT INTO deployments (id, project_id, state, manifest, updated_at) VALUES (?, 'my-site', 'created', '{}', NULL)", want: "NOT NULL constraint failed: deployments.updated_at"},
+		{name: "text", statement: "INSERT INTO deployments (id, project_id, state, manifest, updated_at) VALUES (?, 'my-site', 'created', '{}', 'yesterday')", want: "cannot store TEXT value in INTEGER column"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := database.connection.ExecContext(t.Context(), test.statement, otherDeploymentIDTest)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Errorf("insert with %s update time error = %v, want it to contain %q", test.name, err, test.want)
 			}
 		})
 	}

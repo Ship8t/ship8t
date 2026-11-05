@@ -27,16 +27,23 @@ var schemaStatements = []string{
 		)
 	) STRICT`,
 	// The states are the seven of ADR 0002, so a state read wrongly never
-	// persists. RESTRICT keeps the history of a project that has deployments. No
-	// rule limits the ID or the manifest size, because no ADR gives the shape of
-	// an ID and Decode owns the manifest limit.
+	// persists. RESTRICT keeps the history of a project that has deployments. The
+	// ID is 32 lowercase hexadecimal characters, because it becomes a directory
+	// name under staging and releases. The byte length term rejects a NUL byte,
+	// as for a project. updated_at is Unix seconds, and the idle timeout of ADR
+	// 0002 counts from it. Decode owns the manifest size limit.
 	`CREATE TABLE deployments (
-		id TEXT NOT NULL PRIMARY KEY,
+		id TEXT NOT NULL PRIMARY KEY CHECK (
+			length(CAST(id AS BLOB)) = 32
+			AND length(CAST(id AS BLOB)) = length(id)
+			AND id NOT GLOB '*[^0-9a-f]*'
+		),
 		project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE RESTRICT,
 		state TEXT NOT NULL CHECK (
 			state IN ('created', 'uploading', 'ready', 'failed', 'cancelled', 'expired', 'pruned')
 		),
-		manifest TEXT NOT NULL
+		manifest TEXT NOT NULL,
+		updated_at INTEGER NOT NULL
 	) STRICT`,
 }
 
