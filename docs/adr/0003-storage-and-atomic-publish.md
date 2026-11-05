@@ -483,3 +483,31 @@ SQLite transactions are atomic.
   context, because the first step fails. The count reads the state constants of
   `internal/deployment`, so a new state needs a look at the count and at the
   CHECK of the schema.
+- 2026-11-05. Clarified how the server cancels a deployment while building
+  `internal/storage`, without changing a decision. Cancel a deployment with
+  `CancelDeployment`, which applies the move of ADR 0002 from `created` or
+  `uploading` to `cancelled`. It is the first code that changes a stored state,
+  and it asks `deployment.Transition` for the move and never decides one
+  itself. Check the shape of the deployment ID before any query, which is 32
+  lowercase hexadecimal characters. The ID comes from the route of ADR 0004 and
+  becomes a directory name, so the code checks it as it checks a project ID.
+  The error names the rule and never repeats the value, and the CHECK of the
+  `deployments` table stays as the backstop. Read the state and update the row
+  in one plain transaction. A deployment that is already `cancelled` succeeds
+  and nothing is written, so `updated_at` keeps the time of the real change.
+  The idle timeout of ADR 0002 counts from the last activity of an unfinished
+  deployment, and a terminal one never expires. Any other state fails with an
+  error that wraps `ErrStateConflict`, which the server will answer with `409
+  state_conflict`. A deployment that does not exist fails with a plain error,
+  because ADR 0004 names no code for it, and the server layer decides the
+  status when it exists. Change the row only and touch no directory. The
+  recovery table of this ADR deletes the `staging/<id>` of a terminal
+  deployment, and no upload code makes that directory yet. Set `updated_at`
+  from the system clock in Unix seconds, as deployment creation does. A
+  cancelled deployment leaves the count of unfinished deployments, so a project
+  at its limit can create another. Accept these limits. A failed commit and a
+  failed rollback need a seam, so no test forces them. A test cannot tell which
+  step of the transaction used a cancelled context, because the first step
+  fails. Later code that moves a state must read it and write it in one
+  transaction, as this code does, and no test can show a second writer while
+  the lock and the single connection leave none.

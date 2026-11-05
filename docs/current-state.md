@@ -110,7 +110,7 @@ Only the following exists in the code today.
   names, and data after the object.
 - `internal/deployment` defines the seven deployment states of ADR 0002 and
   checks a move between two of them. `internal/storage` uses its state
-  constants, and no code calls `Transition` yet.
+  constants and calls `Transition` when it cancels a deployment.
   - `Transition` allows the ten moves that the ADR lists, such as `created` to
     `uploading` and `ready` to `pruned`. It rejects every other move with
     `ErrStateConflict`, which the server will answer with `409 state_conflict`.
@@ -127,8 +127,9 @@ Only the following exists in the code today.
     describes the files and decodes the manifest as the server will.
 - `internal/storage` opens the SQLite database, creates its first tables, locks
   the data directory, makes its directories, adds a project with its
-  directories, adds a deployment from a manifest, and holds skipped tests for
-  the rest of storage. No command or server code uses it yet.
+  directories, adds a deployment from a manifest, cancels an unfinished
+  deployment, and holds skipped tests for the rest of storage. No command or
+  server code uses it yet.
   - `Open` takes the path of the database file, creates it when it is missing,
     and returns a `Database`. `Close` closes it. The driver is the pure Go
     `modernc.org/sqlite`, so no C toolchain is needed.
@@ -184,7 +185,8 @@ Only the following exists in the code today.
     the size of the manifest, because `Decode` owns that limit.
   - The tables have no active pointer, and there are no tables for files,
     tokens, the activation log, or idempotency keys yet. `CreateProject` writes
-    to `projects` and `CreateDeployment` writes to `deployments`. No code
+    to `projects`, `CreateDeployment` writes to `deployments`, and
+    `CancelDeployment` changes a row of `deployments`. It is the only code that
     updates `updated_at` after the insert.
   - Version 1 grows with each table until the first release. A development
     database from an earlier step still says version 1, so delete it by hand.
@@ -324,8 +326,32 @@ Only the following exists in the code today.
   - No test forces a failed commit or a clock outside the range inside
     `CreateDeployment`, because each needs a seam. A test cannot tell which step
     of the transaction used a cancelled context, because the first step fails.
+  - `CancelDeployment` moves an unfinished deployment to the `cancelled` state.
+    Call it after `CreateDeployment`. It takes the context and the deployment
+    ID. Nothing calls it yet.
+  - It checks the shape of the ID before it opens a transaction. The ID must
+    have 32 lowercase hexadecimal characters, the shape that `CreateDeployment`
+    makes. The error names the rule and never repeats the value. The table holds
+    the same rule as a backstop, and a test compares the two.
+  - One plain transaction reads the state, asks `Transition` for the move to
+    `cancelled`, and updates the row. A `created` or `uploading` deployment
+    becomes `cancelled`, and its `updated_at` is set to the time of the change
+    in Unix seconds. A deployment that is already `cancelled` succeeds and its
+    row stays as it was, `updated_at` included, so a repeated request is safe.
+  - Any other state fails with an error that wraps `ErrStateConflict`, such as
+    `cancel deployment: state conflict: a deployment cannot move from "ready" to
+    "cancelled"`, and leaves the row as it was. A deployment that does not exist
+    fails with `deployment "<id>" does not exist`.
+  - It changes the row only and touches no directory, because recovery deletes
+    the staging directory of a terminal deployment. A cancelled deployment no
+    longer counts toward the limit of unfinished deployments, so a project at
+    the limit can create another one.
+  - No test forces a failed commit or a failed rollback inside
+    `CancelDeployment`, because each needs a seam. A test cannot tell which step
+    of the transaction used a cancelled context, because the first step fails.
   - The tests for `Open`, the lock, the access rule, the layout, the
-    filesystem check, project creation, and deployment creation run and pass.
+    filesystem check, project creation, deployment creation, and cancelling a
+    deployment run and pass.
     Only the cases listed below skip until the code they need exists, so none of
     them checks anything today.
   - `TestRecoveryAfterInterruption` lists ten cases from ADR 0003. They are a
