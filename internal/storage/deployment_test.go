@@ -646,6 +646,9 @@ func TestCancelDeploymentReturnsContextError(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("CancelDeployment() error = %v, want it to wrap %v", err, context.Canceled)
 	}
+	if err == nil || !strings.HasPrefix(err.Error(), "cancel deployment: begin transaction: ") {
+		t.Errorf("CancelDeployment() error = %v, want the prefix %q", err, "cancel deployment: begin transaction: ")
+	}
 	rows := deploymentRows(t, database)
 	if len(rows) != 1 || rows[0].state != "created" {
 		t.Errorf("rows after the refusal = %+v, want the deployment unchanged", rows)
