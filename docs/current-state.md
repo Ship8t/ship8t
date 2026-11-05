@@ -7,14 +7,15 @@ roadmap.
 Only the following exists in the code today.
 
 - `ship8t` and `ship8td` each accept `version`, which prints the build version,
-  and `help`, which prints the usage text.
+  and `help`, which prints the usage text. `--help` and `-h` also print it.
 - Any other command prints the usage text to standard error and exits with
   code 2.
 - The version comes from a build-time stamp, then from the Go module build info,
   then falls back to `dev`.
 - `internal/manifest` validates and decodes deployment manifests. A manifest
   lists every file of a deployment with its path, size, and SHA-256 checksum, as
-  ADR 0004 defines.
+  ADR 0004 defines. A manifest also carries `manifest_version` and a `serve`
+  object with `spa_fallback`, which is off by default.
   - `Decode` reads at most 8 MiB and accepts only a manifest version it
     supports.
   - It accepts only exact field names, rejects repeated names and trailing data,
@@ -136,12 +137,13 @@ Only the following exists in the code today.
     `-wal` and `-shm` the mode of the main file, so all three are private. It
     opens the parent directory through `os.Root`, so a missing parent directory
     fails with the operating system error.
-  - `Open` refuses an existing `ship8t.db`, `-wal`, or `-shm` that group or
-    other can use, and does not fix it. The error holds the `chmod -- 600`
-    command with the quoted path of that file on one line. It omits the command
-    and quotes the path when the path has a control or unprintable character. A
-    loose `-wal` or `-shm` is refused whatever its size, because a crash can
-    leave one with the mode of an earlier run.
+  - `Open` refuses an existing database file, `-wal`, or `-shm` that group or
+    other can use, and does not fix it. `Open` takes any path, and `ship8t.db`
+    is only the name that the data directory will use. The error holds the
+    `chmod -- 600` command with the quoted path of that file on one line. It
+    omits the command and quotes the path when the path has a control or
+    unprintable character. A loose `-wal` or `-shm` is refused whatever its
+    size, because a crash can leave one with the mode of an earlier run.
   - `Open` also refuses a symlink and any other entry that is not a regular
     file at any of the three names, because SQLite follows a symlink and would
     create its target. It checks the entries with `Lstat` before it creates the
@@ -210,8 +212,9 @@ Only the following exists in the code today.
     opened directory again. It does not cover the modes of the database files,
     which `Open` checks, or of the directories that later steps create inside
     the data directory.
-  - The lock builds on unix platforms only, because it uses `syscall.Flock`.
-    Nothing calls it yet.
+  - The `internal/storage` package builds on unix platforms only, because the
+    lock uses `syscall.Flock` and the filesystem check uses `syscall.Stat_t`.
+    Nothing calls the lock yet.
   - `CreateDataDirectoryLayout` makes `projects/`, `quarantine/`, and
     `pruning/` inside an existing data directory with mode 0700. It sets the
     mode with `chmod`, so the umask does not change it. `CreateProject` makes
