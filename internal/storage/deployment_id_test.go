@@ -154,3 +154,97 @@ func TestNewDeploymentIDSatisfiesTheTable(t *testing.T) {
 		}
 	}
 }
+
+// deploymentIDCases lists the IDs that the shape of ADR 0003 decides, which is
+// 32 lowercase hexadecimal characters. The cases are written out and not taken
+// from the code under test.
+var deploymentIDCases = []struct {
+	name      string
+	id        string
+	wantValid bool
+}{
+	{name: "empty", id: ""},
+	{name: "31 characters", id: strings.Repeat("a", 31)},
+	{name: "33 characters", id: strings.Repeat("a", 33)},
+	{name: "NUL byte inside", id: strings.Repeat("a", 15) + "\x00" + strings.Repeat("a", 16)},
+	{name: "NUL byte at the end", id: strings.Repeat("a", 31) + "\x00"},
+	{name: "quote form", id: "x' OR '1'='1" + strings.Repeat("a", 20)},
+	{name: "parent segment", id: "../" + strings.Repeat("a", 29)},
+	{name: "slash inside", id: strings.Repeat("a", 16) + "/" + strings.Repeat("a", 15)},
+	{name: "newline", id: strings.Repeat("a", 31) + "\n"},
+	{name: "space", id: strings.Repeat("a", 31) + " "},
+	{name: "uppercase A", id: strings.Repeat("a", 31) + "A"},
+	{name: "uppercase F", id: strings.Repeat("a", 31) + "F"},
+	{name: "multibyte with 32 bytes", id: "é" + strings.Repeat("a", 30)},
+	{name: "multibyte with 32 characters", id: "é" + strings.Repeat("a", 31)},
+	{name: "oversized", id: strings.Repeat("a", 10_000)},
+	// The characters just outside each accepted range, which a wrong bound in
+	// the rule would let through.
+	{name: "slash before zero", id: strings.Repeat("a", 31) + "/"},
+	{name: "colon after nine", id: strings.Repeat("a", 31) + ":"},
+	{name: "backtick before a", id: strings.Repeat("a", 31) + "`"},
+	{name: "g after f", id: strings.Repeat("a", 31) + "g"},
+	{name: "at sign before uppercase A", id: strings.Repeat("a", 31) + "@"},
+	{name: "all zeros", id: strings.Repeat("0", 32), wantValid: true},
+	{name: "all f", id: strings.Repeat("f", 32), wantValid: true},
+	{name: "only digits", id: strings.Repeat("9", 32), wantValid: true},
+	{name: "only letters", id: strings.Repeat("a", 32), wantValid: true},
+	// The first and last character of each accepted range, in the first and
+	// the last position.
+	{name: "both ranges", id: deploymentIDTest, wantValid: true},
+	{name: "both ranges reversed", id: otherDeploymentIDTest, wantValid: true},
+	{name: "nine first and a last", id: "9" + strings.Repeat("0", 30) + "a", wantValid: true},
+	{name: "f first and zero last", id: "f" + strings.Repeat("a", 30) + "0", wantValid: true},
+}
+
+func TestValidateDeploymentID(t *testing.T) {
+	for _, test := range deploymentIDCases {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateDeploymentID(test.id)
+			if test.wantValid && err != nil {
+				t.Errorf("validateDeploymentID(%q) error = %v, want nil", test.id, err)
+			}
+			if !test.wantValid && err == nil {
+				t.Errorf("validateDeploymentID(%q) error = nil, want an error", test.id)
+			}
+		})
+	}
+}
+
+func TestValidateDeploymentIDAcceptsANewID(t *testing.T) {
+	id, err := newDeploymentID(time.UnixMilli(1_700_000_000_123))
+	if err != nil {
+		t.Fatalf("newDeploymentID() error = %v, want nil", err)
+	}
+	if err := validateDeploymentID(id); err != nil {
+		t.Errorf("validateDeploymentID(%q) error = %v, want nil", id, err)
+	}
+}
+
+func TestValidateDeploymentIDNamesTheRuleAndNeverTheValue(t *testing.T) {
+	const want = "deployment ID must be 32 lowercase hexadecimal characters"
+	for _, id := range []string{"", "short", strings.Repeat("Z", 10_000), "secret-token-value-secret-token-v"} {
+		err := validateDeploymentID(id)
+		if err == nil || err.Error() != want {
+			t.Errorf("validateDeploymentID(%.20q) error = %v, want %q", id, err, want)
+		}
+	}
+}
+
+func TestValidateDeploymentIDAgreesWithTheDeploymentsTable(t *testing.T) {
+	// The CHECK of the table is the backstop of this rule, so both must give the
+	// same verdict. A difference means that one of them drifted.
+	database := ensureTestSchema(t)
+
+	for _, test := range deploymentIDCases {
+		t.Run(test.name, func(t *testing.T) {
+			insertErr := insertDeploymentTest(t.Context(), database, test.id, "my-site", "created", "{}")
+			if (insertErr == nil) != test.wantValid {
+				t.Errorf("insert deployment %q error = %v, want valid = %v", test.id, insertErr, test.wantValid)
+			}
+			if (validateDeploymentID(test.id) == nil) != (insertErr == nil) {
+				t.Errorf("validateDeploymentID(%q) and the table disagree, insert error = %v", test.id, insertErr)
+			}
+		})
+	}
+}
