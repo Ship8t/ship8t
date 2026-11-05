@@ -131,7 +131,8 @@ item is not done, and its line says what exists. See
 Done.
 
 - [x] Manifest validation shared by the client and the server, in
-  `internal/manifest`. The scanner uses it, and the server does not use it yet.
+  `internal/manifest`. The scanner and `internal/storage` use it, and no command
+  calls either yet.
 - [x] Directory scanner with ignore rules, symlink rejection, and secret
   detection, in `internal/scan`. No command calls it yet.
 
