@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ship8t/ship8t/internal/deployment"
 	"github.com/ship8t/ship8t/internal/manifest"
 )
 
@@ -434,5 +435,219 @@ func TestCreateDeploymentKeepsTheLimitUnderConcurrentCalls(t *testing.T) {
 	}
 	if got := len(deploymentRows(t, database)); got != limit {
 		t.Errorf("deployments = %d, want %d", got, limit)
+	}
+}
+
+func TestCancelDeploymentCancelsAnUnfinishedDeployment(t *testing.T) {
+	for _, state := range []deployment.State{deployment.Created, deployment.Uploading} {
+		t.Run(string(state), func(t *testing.T) {
+			database := ensureTestSchema(t)
+			execTest(t, database, "INSERT INTO projects (id) VALUES ('other-site')")
+			if err := insertDeploymentTest(t.Context(), database, deploymentIDTest, "my-site", string(state), `{"kept":true}`); err != nil {
+				t.Fatalf("insert deployment: %v", err)
+			}
+			if err := insertDeploymentTest(t.Context(), database, otherDeploymentIDTest, "other-site", string(state), "{}"); err != nil {
+				t.Fatalf("insert other deployment: %v", err)
+			}
+
+			before := time.Now().Unix()
+			err := database.CancelDeployment(t.Context(), deploymentIDTest)
+			after := time.Now().Unix()
+
+			if err != nil {
+				t.Fatalf("CancelDeployment() error = %v, want nil", err)
+			}
+			rows := deploymentRows(t, database)
+			if len(rows) != 2 {
+				t.Fatalf("deployments = %d, want 2", len(rows))
+			}
+			cancelled, other := rows[0], rows[1]
+			if cancelled.id != deploymentIDTest {
+				t.Fatalf("first row ID = %q, want %q", cancelled.id, deploymentIDTest)
+			}
+			if cancelled.state != "cancelled" {
+				t.Errorf("state = %q, want %q", cancelled.state, "cancelled")
+			}
+			if cancelled.updatedAt < before || cancelled.updatedAt > after {
+				t.Errorf("updated_at = %d, want between %d and %d", cancelled.updatedAt, before, after)
+			}
+			if cancelled.projectID != "my-site" || cancelled.manifest != `{"kept":true}` {
+				t.Errorf("project and manifest = %q and %q, want them unchanged", cancelled.projectID, cancelled.manifest)
+			}
+			if other.state != string(state) || other.updatedAt != 1 {
+				t.Errorf("deployment of another project = state %q, updated_at %d, want %q and 1", other.state, other.updatedAt, state)
+			}
+		})
+	}
+}
+
+func TestCancelDeploymentRefusesAStateThatCannotMove(t *testing.T) {
+	// The states are written out, so a new state needs a decision here.
+	for _, state := range []string{"ready", "failed", "expired", "pruned"} {
+		t.Run(state, func(t *testing.T) {
+			database := ensureTestSchema(t)
+			if err := insertDeploymentTest(t.Context(), database, deploymentIDTest, "my-site", state, "{}"); err != nil {
+				t.Fatalf("insert deployment: %v", err)
+			}
+
+			err := database.CancelDeployment(t.Context(), deploymentIDTest)
+
+			want := fmt.Sprintf(`cancel deployment: state conflict: a deployment cannot move from %q to "cancelled"`, state)
+			if err == nil || err.Error() != want {
+				t.Errorf("CancelDeployment() error = %v, want %q", err, want)
+			}
+			if !errors.Is(err, deployment.ErrStateConflict) {
+				t.Errorf("CancelDeployment() error = %v, want it to wrap %v", err, deployment.ErrStateConflict)
+			}
+			rows := deploymentRows(t, database)
+			if len(rows) != 1 || rows[0].state != state || rows[0].updatedAt != 1 {
+				t.Errorf("rows after the refusal = %+v, want one %q row with updated_at 1", rows, state)
+			}
+		})
+	}
+}
+
+func TestCancelDeploymentAcceptsARepeatAndChangesNothing(t *testing.T) {
+	database := ensureTestSchema(t)
+	if err := insertDeploymentTest(t.Context(), database, deploymentIDTest, "my-site", "cancelled", "{}"); err != nil {
+		t.Fatalf("insert deployment: %v", err)
+	}
+
+	if err := database.CancelDeployment(t.Context(), deploymentIDTest); err != nil {
+		t.Errorf("CancelDeployment() error = %v, want nil", err)
+	}
+
+	rows := deploymentRows(t, database)
+	if len(rows) != 1 || rows[0].state != "cancelled" || rows[0].updatedAt != 1 {
+		t.Errorf("rows after the repeat = %+v, want one cancelled row with updated_at 1", rows)
+	}
+}
+
+func TestCancelDeploymentCancelsADeploymentThatCreateDeploymentMade(t *testing.T) {
+	database := ensureTestSchema(t)
+	id, err := database.CreateDeployment(t.Context(), "my-site", validManifestTest(), manifest.DefaultLimits(), 10)
+	if err != nil {
+		t.Fatalf("CreateDeployment() error = %v, want nil", err)
+	}
+
+	for attempt := 1; attempt <= 2; attempt++ {
+		if err := database.CancelDeployment(t.Context(), id); err != nil {
+			t.Errorf("CancelDeployment() attempt %d error = %v, want nil", attempt, err)
+		}
+		rows := deploymentRows(t, database)
+		if len(rows) != 1 || rows[0].id != id || rows[0].state != "cancelled" {
+			t.Errorf("rows after attempt %d = %+v, want one cancelled row with ID %q", attempt, rows, id)
+		}
+	}
+}
+
+func TestCancelDeploymentRejectsAMissingDeployment(t *testing.T) {
+	database := ensureTestSchema(t)
+	if err := insertDeploymentTest(t.Context(), database, otherDeploymentIDTest, "my-site", "created", "{}"); err != nil {
+		t.Fatalf("insert deployment: %v", err)
+	}
+
+	err := database.CancelDeployment(t.Context(), deploymentIDTest)
+
+	want := fmt.Sprintf("deployment %q does not exist", deploymentIDTest)
+	if err == nil || err.Error() != want {
+		t.Errorf("CancelDeployment() error = %v, want %q", err, want)
+	}
+	rows := deploymentRows(t, database)
+	if len(rows) != 1 || rows[0].state != "created" {
+		t.Errorf("rows after the refusal = %+v, want the other deployment unchanged", rows)
+	}
+}
+
+func TestCancelDeploymentRejectsAnIDThatIsNotWellFormed(t *testing.T) {
+	database := ensureTestSchema(t)
+	if err := insertDeploymentTest(t.Context(), database, deploymentIDTest, "my-site", "created", "{}"); err != nil {
+		t.Fatalf("insert deployment: %v", err)
+	}
+	if err := insertDeploymentTest(t.Context(), database, otherDeploymentIDTest, "my-site", "uploading", "{}"); err != nil {
+		t.Fatalf("insert other deployment: %v", err)
+	}
+
+	for _, test := range []struct {
+		name string
+		id   string
+	}{
+		{name: "empty", id: ""},
+		{name: "NUL byte", id: strings.Repeat("a", 15) + "\x00" + strings.Repeat("a", 16)},
+		{name: "quote form", id: "x' OR '1'='1" + strings.Repeat("a", 20)},
+		{name: "parent segment", id: "../" + strings.Repeat("a", 29)},
+		{name: "uppercase", id: strings.ToUpper(deploymentIDTest)},
+		{name: "oversized", id: strings.Repeat("a", 10_000)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := database.CancelDeployment(t.Context(), test.id)
+
+			want := "deployment ID must be 32 lowercase hexadecimal characters"
+			if err == nil || err.Error() != want {
+				t.Errorf("CancelDeployment(%.40q) error = %v, want %q", test.id, err, want)
+			}
+			rows := deploymentRows(t, database)
+			if len(rows) != 2 || rows[0].state != "created" || rows[1].state != "uploading" {
+				t.Errorf("rows after the refusal = %+v, want both unchanged", rows)
+			}
+		})
+	}
+}
+
+func TestCancelDeploymentLeavesOtherDeploymentsAlone(t *testing.T) {
+	database := ensureTestSchema(t)
+	execTest(t, database, "INSERT INTO projects (id) VALUES ('other-site')")
+	for number, project := range []string{"my-site", "my-site", "other-site"} {
+		insertUnfinishedTest(t, database, project, number+1, "created")
+	}
+
+	if err := database.CancelDeployment(t.Context(), fmt.Sprintf("%032x", 2)); err != nil {
+		t.Fatalf("CancelDeployment() error = %v, want nil", err)
+	}
+
+	var states []string
+	for _, row := range deploymentRows(t, database) {
+		states = append(states, row.state)
+	}
+	if got, want := strings.Join(states, ","), "created,cancelled,created"; got != want {
+		t.Errorf("states = %q, want %q", got, want)
+	}
+}
+
+func TestCancelDeploymentFreesRoomUnderTheUnfinishedLimit(t *testing.T) {
+	database := ensureTestSchema(t)
+	id, err := database.CreateDeployment(t.Context(), "my-site", validManifestTest(), manifest.DefaultLimits(), 1)
+	if err != nil {
+		t.Fatalf("CreateDeployment() error = %v, want nil", err)
+	}
+	if _, err := database.CreateDeployment(t.Context(), "my-site", validManifestTest(), manifest.DefaultLimits(), 1); err == nil {
+		t.Fatal("CreateDeployment() at the limit error = nil, want an error")
+	}
+
+	if err := database.CancelDeployment(t.Context(), id); err != nil {
+		t.Fatalf("CancelDeployment() error = %v, want nil", err)
+	}
+
+	if _, err := database.CreateDeployment(t.Context(), "my-site", validManifestTest(), manifest.DefaultLimits(), 1); err != nil {
+		t.Errorf("CreateDeployment() after a cancel error = %v, want nil", err)
+	}
+}
+
+func TestCancelDeploymentReturnsContextError(t *testing.T) {
+	database := ensureTestSchema(t)
+	if err := insertDeploymentTest(t.Context(), database, deploymentIDTest, "my-site", "created", "{}"); err != nil {
+		t.Fatalf("insert deployment: %v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err := database.CancelDeployment(ctx, deploymentIDTest)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("CancelDeployment() error = %v, want it to wrap %v", err, context.Canceled)
+	}
+	rows := deploymentRows(t, database)
+	if len(rows) != 1 || rows[0].state != "created" {
+		t.Errorf("rows after the refusal = %+v, want the deployment unchanged", rows)
 	}
 }

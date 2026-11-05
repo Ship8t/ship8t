@@ -80,3 +80,56 @@ func createDeploymentIn(ctx context.Context, transaction *sql.Tx, projectID, id,
 	}
 	return nil
 }
+
+// CancelDeployment moves an unfinished deployment to the cancelled state and
+// records the time of the change. It accepts a deployment that is already
+// cancelled and leaves its row alone, so a repeated request is safe. It refuses
+// any other state with an error that wraps deployment.ErrStateConflict, as ADR
+// 0002 sets out. It changes the row only, because recovery deletes the staging
+// directory of a terminal deployment. The ID must have the shape of
+// newDeploymentID, and the check runs before any query. The read and the update
+// run in one plain transaction.
+func (database *Database) CancelDeployment(ctx context.Context, deploymentID string) error {
+	if err := validateDeploymentID(deploymentID); err != nil {
+		return err
+	}
+
+	transaction, err := database.connection.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("cancel deployment: begin transaction: %w", err)
+	}
+	if err := cancelDeploymentIn(ctx, transaction, deploymentID, time.Now().Unix()); err != nil {
+		return errors.Join(err, transaction.Rollback())
+	}
+	if err := transaction.Commit(); err != nil {
+		return fmt.Errorf("cancel deployment: commit: %w", err)
+	}
+	return nil
+}
+
+// cancelDeploymentIn reads the state of the deployment, checks the move with the
+// state machine, and updates the row only when the state changes, inside the
+// transaction.
+func cancelDeploymentIn(ctx context.Context, transaction *sql.Tx, deploymentID string, updatedAt int64) error {
+	var state string
+	err := transaction.QueryRowContext(ctx, "SELECT state FROM deployments WHERE id = ?", deploymentID).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("deployment %q does not exist", deploymentID)
+	}
+	if err != nil {
+		return fmt.Errorf("cancel deployment: look up deployment: %w", err)
+	}
+
+	changed, err := deployment.Transition(deployment.State(state), deployment.Cancelled)
+	if err != nil {
+		return fmt.Errorf("cancel deployment: %w", err)
+	}
+	if !changed {
+		return nil
+	}
+
+	if _, err := transaction.ExecContext(ctx, "UPDATE deployments SET state = ?, updated_at = ? WHERE id = ?", string(deployment.Cancelled), updatedAt, deploymentID); err != nil {
+		return fmt.Errorf("cancel deployment: update: %w", err)
+	}
+	return nil
+}
