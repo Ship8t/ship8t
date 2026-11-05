@@ -124,8 +124,9 @@ Only the following exists in the code today.
     `ship8t.json` of a test site and scans the site with them. It then
     describes the files and decodes the manifest as the server will.
 - `internal/storage` opens the SQLite database, creates its first tables, locks
-  the data directory, and holds skipped tests for the rest of storage. No
-  command or server code uses it yet.
+  the data directory, makes its directories, adds a project with its
+  directories, and holds skipped tests for the rest of storage. No command or
+  server code uses it yet.
   - `Open` takes the path of the database file, creates it when it is missing,
     and returns a `Database`. `Close` closes it. The driver is the pure Go
     `modernc.org/sqlite`, so no C toolchain is needed.
@@ -175,7 +176,8 @@ Only the following exists in the code today.
     the state to the seven states of ADR 0002.
   - No rule limits the deployment ID or the size of the manifest. The tables
     have no timestamps and no active pointer, and there are no tables for files,
-    tokens, the activation log, or idempotency keys yet. Nothing writes a row.
+    tokens, the activation log, or idempotency keys yet. Only `CreateProject`
+    writes a row, and it writes to `projects`.
   - Version 1 grows with each table until the first release. A development
     database from an earlier step still says version 1, so delete it by hand.
     There is no migration.
@@ -212,8 +214,8 @@ Only the following exists in the code today.
     Nothing calls it yet.
   - `CreateDataDirectoryLayout` makes `projects/`, `quarantine/`, and
     `pruning/` inside an existing data directory with mode 0700. It sets the
-    mode with `chmod`, so the umask does not change it. The directories of a
-    project come with the project, and nothing creates them yet.
+    mode with `chmod`, so the umask does not change it. `CreateProject` makes
+    the directories of a project.
   - It applies the checks of the lock first, so it rejects an empty, missing, or
     non-directory path and a data directory that group or other can use. It
     never creates the data directory. Call it after `LockDataDirectory`.
@@ -245,12 +247,46 @@ Only the following exists in the code today.
     an unknown device never counts as the same.
   - It does not catch a bind mount of the same filesystem, which can show one
     device and still fail a rename with `EXDEV`. It does not look at
-    `quarantine/` or at a mount below `projects/<id>`, which the step that
-    creates a project checks. No test can make a real mount, so the refusal is
-    tested through an unexported function that takes two directories.
-  - The tests for `Open`, the lock, the access rule, the layout, and the
-    filesystem check run and pass. Only the cases listed below skip until the
-    code they need exists, so none of them checks anything today.
+    `quarantine/` or at a mount below `projects/<id>`, which `CreateProject`
+    checks for the existing directories of a project. No test can make a real
+    mount, so the refusal is tested through an unexported function that takes
+    two directories.
+  - `CreateProject` adds a project to the `projects` table and makes its
+    directories in the data directory, in one plain transaction that commits
+    last. Call it after `EnsureSchema` and `CreateDataDirectoryLayout`. It takes
+    the context, the data directory, and the project ID. Nothing calls it yet.
+  - It rejects an ID that is not a slug, which is 1 to 63 bytes of lowercase
+    letters, digits, and hyphens with no leading or trailing hyphen, before it
+    builds any path. The error names the rule and never repeats an oversized
+    value. The table holds the same rule as a backstop, and `internal/config`
+    holds a copy for the client.
+  - It makes `projects/<id>` with `staging` and `releases` inside it and mode
+    0700, set with `chmod` after each `mkdir`. It needs `projects/` and
+    `pruning/` to exist, and it says to create the layout first when one is
+    missing. It applies the checks of the data directory and of the layout, and
+    it checks every existing entry before the first `mkdir`, so a refused
+    project creates nothing. It rejects an entry that is not a directory or that
+    group or other can use, with the errors of the layout, and it never follows
+    a symlink. It adopts a real directory with mode 0700 and leaves its content
+    alone.
+  - It rejects a project whose existing directories are on another filesystem
+    than `pruning/`, with the error of the filesystem check. It compares
+    `projects/` and each existing entry of the project with `pruning/` before
+    the first `mkdir`, and a new directory is on the filesystem of its parent.
+    It does not catch a mount placed after the project was made or a bind mount
+    of the same filesystem, and no test can make a mount.
+  - It makes the directories first and then inserts the row with `ON CONFLICT DO
+    NOTHING`, so an existing project is accepted and a repeat is safe. A repeat
+    makes any directory of the project that is missing. A failure rolls back and
+    leaves no row. A failed insert or a crash before the commit can leave the
+    empty directories of a project that has no row, and the next call adopts
+    them.
+  - The data directory is a parameter that nothing ties to the database file, so
+    the caller must pass the one that holds `ship8t.db`.
+  - The tests for `Open`, the lock, the access rule, the layout, the
+    filesystem check, and project creation run and pass. Only the cases listed
+    below skip until the code they need exists, so none of them checks anything
+    today.
   - `TestRecoveryAfterInterruption` lists ten cases from ADR 0003. They are a
     crash before the `ready` commit, the staging directories of dead and live
     deployments, an unknown release directory, a missing release directory, an

@@ -406,3 +406,42 @@ SQLite transactions are atomic.
   directories, and no test catches a caller that drops its result or swaps the
   two paths. Replacing `Lstat` with `Stat` changes nothing, because the check of
   the type refuses a symlink first.
+- 2026-11-05. Clarified how the server creates a project while building
+  `internal/storage`, without changing a decision. Validate the project ID in Go
+  against the slug rule of this ADR before any path is built from it, because
+  the CHECK of the `projects` table is only a backstop. Keep a second copy of
+  the rule in storage and not a shared validator, because `internal/config` is
+  the only other user, and extract it at a third use. Make `projects/<id>` with
+  `staging` and `releases` inside it in the existing layout, with mode 0700. Set
+  the mode with `chmod` after each `mkdir`, and make the directories one at a
+  time, because a probe showed that `Root.MkdirAll` under a umask that clears
+  the owner write bit leaves a parent that cannot take its child. Require
+  `projects/` and `pruning/` to exist and never create the layout. Apply the
+  checks of the data directory and of the layout, and check every existing entry
+  before the first `mkdir`, so a refused project creates nothing. Look at each
+  entry with `Lstat`, because a probe showed that `os.Root` follows a symlink
+  that stays inside the data directory when it makes a directory. Refuse an
+  entry that is not a directory and one that group or other can use, with the
+  errors of the layout, and adopt a real directory with mode 0700 and leave its
+  content alone. This entry settles what the entry of the filesystem check left
+  to the step that creates a project. Compare the device of `projects/` and of
+  each existing entry among `projects/<id>`, `staging`, and `releases` with the
+  device of `pruning/`, before the first `mkdir`, with the comparison and the
+  errors of the filesystem check. A new directory is on the filesystem of its
+  parent, so it is covered. Create the row and the directories in one plain
+  transaction that commits last. Make the directories first and insert the row
+  after them with `ON CONFLICT DO NOTHING`, so a refused ID is reported in words
+  and not as a failed CHECK, and so a repeat succeeds. A repeat makes any
+  directory of an existing project that is missing. That repairs only the empty
+  directories of a project and never the directory of a release, which recovery
+  checks for each `ready` deployment on its own. A failure leaves no row. A
+  failed insert or a crash before the commit can leave the empty directories of
+  a project that has no row, and the next call adopts them. The recovery table
+  of this ADR has no row for that state, so the recovery design decides whether
+  start should look at it. Accept these limits. The caller passes the data
+  directory, and nothing ties it to the database file, so `ship8td serve` owns
+  that pairing. A mount placed after a project is created is not caught, and
+  neither is a bind mount of the same filesystem. No test without root can make
+  a mount, so no test shows that the comparison refuses an entry. A failed
+  `chmod` of a new directory and a failed commit need a seam, so no test forces
+  them.
