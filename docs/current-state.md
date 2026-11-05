@@ -110,7 +110,7 @@ Only the following exists in the code today.
   names, and data after the object.
 - `internal/deployment` defines the seven deployment states of ADR 0002 and
   checks a move between two of them. `internal/storage` uses its state
-  constants and calls `Transition` when it cancels a deployment.
+  constants and calls `Transition` when it cancels or expires a deployment.
   - `Transition` allows the ten moves that the ADR lists, such as `created` to
     `uploading` and `ready` to `pruned`. It rejects every other move with
     `ErrStateConflict`, which the server will answer with `409 state_conflict`.
@@ -128,8 +128,8 @@ Only the following exists in the code today.
 - `internal/storage` opens the SQLite database, creates its first tables, locks
   the data directory, makes its directories, adds a project with its
   directories, adds a deployment from a manifest, cancels an unfinished
-  deployment, and holds skipped tests for the rest of storage. No command or
-  server code uses it yet.
+  deployment, expires idle deployments, and holds skipped tests for the rest of
+  storage. No command or server code uses it yet.
   - `Open` takes the path of the database file, creates it when it is missing,
     and returns a `Database`. `Close` closes it. The driver is the pure Go
     `modernc.org/sqlite`, so no C toolchain is needed.
@@ -186,8 +186,8 @@ Only the following exists in the code today.
   - The tables have no active pointer, and there are no tables for files,
     tokens, the activation log, or idempotency keys yet. `CreateProject` writes
     to `projects`, `CreateDeployment` writes to `deployments`, and
-    `CancelDeployment` changes a row of `deployments`. It is the only code that
-    updates `updated_at` after the insert.
+    `CancelDeployment` and `ExpireIdleDeployments` change rows of `deployments`.
+    They are the only code that updates `updated_at` after the insert.
   - Version 1 grows with each table until the first release. A development
     database from an earlier step still says version 1, so delete it by hand.
     There is no migration.
@@ -322,7 +322,8 @@ Only the following exists in the code today.
   - It makes no directory, because `created` means that no content has been
     accepted, and the first upload will make `staging/<id>`. A repeat of a call
     makes a second deployment, because the idempotency key of ADR 0004 does not
-    exist yet. Nothing expires a deployment yet.
+    exist yet. `ExpireIdleDeployments` expires idle ones, and nothing runs it
+    yet.
   - No test forces a failed commit or a clock outside the range inside
     `CreateDeployment`, because each needs a seam. A test cannot tell which step
     of the transaction used a cancelled context, because the first step fails.
@@ -349,9 +350,32 @@ Only the following exists in the code today.
   - No test forces a failed commit or a failed rollback inside
     `CancelDeployment`, because each needs a seam. A test cannot tell which step
     of the transaction used a cancelled context, because the first step fails.
+  - `ExpireIdleDeployments` moves every unfinished deployment that has been idle
+    for the timeout to the `expired` state and returns their IDs in order. Call
+    it after `EnsureSchema`. It takes the context and the idle timeout. Nothing
+    calls it yet, and nothing runs it on a schedule.
+  - It rejects a timeout below one second with an error that names the value,
+    because a timeout of zero or less would expire every unfinished deployment.
+    This differs from the limit of unfinished deployments, where zero or less
+    refuses every create.
+  - A `created` or `uploading` deployment expires when its `updated_at` is at
+    least the timeout old, counted in whole seconds, so a deployment that has
+    been idle for exactly the timeout expires. The row gets the state `expired`
+    and an `updated_at` set to the time of the sweep. A deployment in any other
+    state is left alone, an `expired` one included, so a repeat writes nothing.
+  - One plain transaction selects the candidates and asks `Transition` for each
+    move, and a failure rolls back the whole sweep. It changes rows only and
+    touches no directory. Removing `staging/<id>` on expiry and on cancel, and
+    refreshing `updated_at` when a file is accepted, are owed to the upload code
+    that makes the directory. An expired deployment no longer counts toward the
+    limit of unfinished deployments.
+  - No test forces a failed commit or a failed rollback inside the sweep,
+    because each needs a seam. The state filter lets only `created` and
+    `uploading` rows through, so `Transition` never refuses one, and no test
+    shows that the sweep calls it.
   - The tests for `Open`, the lock, the access rule, the layout, the
-    filesystem check, project creation, deployment creation, and cancelling a
-    deployment run and pass.
+    filesystem check, project creation, deployment creation, cancelling a
+    deployment, and expiring idle deployments run and pass.
     Only the cases listed below skip until the code they need exists, so none of
     them checks anything today.
   - `TestRecoveryAfterInterruption` lists ten cases from ADR 0003. They are a

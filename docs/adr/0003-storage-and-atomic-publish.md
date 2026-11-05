@@ -511,3 +511,35 @@ SQLite transactions are atomic.
   fails. Later code that moves a state must read it and write it in one
   transaction, as this code does, and no test can show a second writer while
   the lock and the single connection leave none.
+- 2026-11-05. Clarified how the server expires idle deployments while building
+  `internal/storage`, without changing a decision. Expire a deployment with
+  `ExpireIdleDeployments`, which applies the move of ADR 0002 from `created` or
+  `uploading` to `expired` when the deployment sees no activity for the idle
+  timeout. Take the timeout as a parameter, because this ADR and ADR 0004 make
+  it configurable, and reject a value below one second, because a timeout of
+  zero or less would expire every unfinished deployment. This differs from the
+  limit of unfinished deployments, where zero or less refuses every create and
+  so fails closed by itself. Read no activity for the idle timeout as reached,
+  so a deployment whose last activity is exactly the timeout old expires, and
+  compare whole seconds of `updated_at`. Select the candidates in one plain
+  transaction with a state filter that only narrows the scan, then ask
+  `deployment.Transition` for each move, so every state change still goes
+  through the one transition function that ADR 0002 asks for. Update each row
+  with the state `expired` and `updated_at` set to the time of the sweep, and
+  return the IDs of the expired deployments in order. Take the time as a
+  parameter of an unexported function and let the exported method pass the
+  system clock. That is the one seam, and it lets a test place a deployment
+  exactly on the edge of the timeout. Change rows only and touch no directory.
+  The retention rule above also says to remove the staging directories of
+  expired deployments, and the recovery table deletes the staging directory of a
+  terminal deployment at start, but a running server does not restart to run
+  recovery. No code makes `staging/<id>` yet, so nothing exists to remove. Owe
+  the removal on expiry and on cancel to the upload increment, which makes the
+  directory, and owe it the refresh of `updated_at` when it accepts a file,
+  because the idle timeout counts from the last activity. Accept these limits. A
+  failed commit, a failed rollback, an ignored error of the row cursor, and a
+  background context in the select or the update need a seam, so no test forces
+  them. The state filter lets only `created` and `uploading` rows through, so
+  `Transition` never refuses one, and no test shows that the sweep calls it. A
+  new state needs a look at the filter and at its test. Nothing calls the method
+  yet, and no scheduler runs the sweep, which the server code will own.
