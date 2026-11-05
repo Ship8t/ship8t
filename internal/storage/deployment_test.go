@@ -651,3 +651,44 @@ func TestCancelDeploymentReturnsContextError(t *testing.T) {
 		t.Errorf("rows after the refusal = %+v, want the deployment unchanged", rows)
 	}
 }
+
+func TestCancelDeploymentReportsAFailedLookup(t *testing.T) {
+	database := ensureTestSchema(t)
+	// A missing table makes the lookup fail with an error that is not a missing
+	// row, so no seam is needed to reach the path.
+	execTest(t, database, "DROP TABLE deployments")
+
+	err := database.CancelDeployment(t.Context(), deploymentIDTest)
+
+	if err == nil || !strings.HasPrefix(err.Error(), "cancel deployment: look up deployment: ") {
+		t.Errorf("CancelDeployment() error = %v, want the prefix %q", err, "cancel deployment: look up deployment: ")
+	}
+	if err != nil && strings.Contains(err.Error(), "does not exist") {
+		t.Errorf("CancelDeployment() error = %v, want a failed lookup and not a missing deployment", err)
+	}
+}
+
+func TestCancelDeploymentReportsAFailedUpdateAndLeavesTheRow(t *testing.T) {
+	database := ensureTestSchema(t)
+	if err := insertDeploymentTest(t.Context(), database, deploymentIDTest, "my-site", "uploading", "{}"); err != nil {
+		t.Fatalf("insert deployment: %v", err)
+	}
+	// A trigger makes the update fail, so no seam is needed to reach the path.
+	execTest(t, database, "CREATE TRIGGER refuse_update BEFORE UPDATE ON deployments BEGIN SELECT RAISE(ABORT, 'update refused'); END")
+
+	err := database.CancelDeployment(t.Context(), deploymentIDTest)
+
+	if err == nil || !strings.HasPrefix(err.Error(), "cancel deployment: update: ") || !strings.Contains(err.Error(), "update refused") {
+		t.Errorf("CancelDeployment() error = %v, want the prefix %q and the cause", err, "cancel deployment: update: ")
+	}
+	rows := deploymentRows(t, database)
+	if len(rows) != 1 || rows[0].state != "uploading" || rows[0].updatedAt != 1 {
+		t.Errorf("rows after the failure = %+v, want one uploading row with updated_at 1", rows)
+	}
+
+	// The failure must release the one connection, so a later call works.
+	execTest(t, database, "DROP TRIGGER refuse_update")
+	if err := database.CancelDeployment(t.Context(), deploymentIDTest); err != nil {
+		t.Errorf("CancelDeployment() after the failure error = %v, want nil", err)
+	}
+}
