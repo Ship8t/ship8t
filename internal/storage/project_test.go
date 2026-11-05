@@ -36,10 +36,26 @@ var projectIDCases = []struct {
 	{name: "accented letter", id: "café"},
 	{name: "underscore", id: "my_site"},
 	{name: "right to left override", id: "a\u202eb"},
+	// The characters just outside each accepted range, which a wrong bound in
+	// the rule would let through.
+	{name: "slash before zero", id: "a/b"},
+	{name: "colon after nine", id: "a:b"},
+	{name: "at sign before a", id: "a@b"},
+	{name: "backtick before a", id: "a`b"},
+	{name: "opening bracket after z", id: "a[b"},
+	{name: "opening brace after z", id: "a{b"},
+	{name: "comma before hyphen", id: "a,b"},
+	{name: "dot after hyphen", id: "a.b"},
 	{name: "64 characters", id: strings.Repeat("a", 64)},
 	{name: "63 characters", id: strings.Repeat("a", 63), wantValid: true},
 	{name: "one character", id: "a", wantValid: true},
 	{name: "only digits", id: "123", wantValid: true},
+	// The first and last character of each accepted range.
+	{name: "zero", id: "0", wantValid: true},
+	{name: "nine", id: "9", wantValid: true},
+	{name: "z", id: "z", wantValid: true},
+	{name: "every letter and digit", id: "abcdefghijklmnopqrstuvwxyz0123456789", wantValid: true},
+	{name: "range ends inside a name", id: "z0-9a", wantValid: true},
 	{name: "hyphen inside", id: "my-site", wantValid: true},
 	{name: "two hyphens inside", id: "my--site", wantValid: true},
 }
