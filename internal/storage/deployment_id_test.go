@@ -178,6 +178,15 @@ var deploymentIDCases = []struct {
 	{name: "multibyte with 32 bytes", id: "é" + strings.Repeat("a", 30)},
 	{name: "multibyte with 32 characters", id: "é" + strings.Repeat("a", 31)},
 	{name: "oversized", id: strings.Repeat("a", 10_000)},
+	// A bad character in the first position and nowhere else, which a loop that
+	// starts too late would let through.
+	{name: "g first", id: "g" + strings.Repeat("a", 31)},
+	{name: "uppercase A first", id: "A" + strings.Repeat("a", 31)},
+	{name: "slash first", id: "/" + strings.Repeat("a", 31)},
+	{name: "colon first", id: ":" + strings.Repeat("a", 31)},
+	{name: "backtick first", id: "`" + strings.Repeat("a", 31)},
+	{name: "space first", id: " " + strings.Repeat("a", 31)},
+	{name: "NUL byte first", id: "\x00" + strings.Repeat("a", 31)},
 	// The characters just outside each accepted range, which a wrong bound in
 	// the rule would let through.
 	{name: "slash before zero", id: strings.Repeat("a", 31) + "/"},
