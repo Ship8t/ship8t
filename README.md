@@ -18,9 +18,9 @@ Deploying, rollback, the server, authentication, and all of storage except
 opening the database, creating its first two tables, locking the data
 directory, making its top level directories, checking that two of them share a
 filesystem, adding a project with its directories, adding a deployment from a
-manifest, and cancelling an unfinished deployment are not implemented. No
-command reads a configuration file yet. The commands described in the ADRs do
-not exist yet.
+manifest, cancelling an unfinished deployment, and expiring idle deployments are
+not implemented. No command reads a configuration file yet. The commands
+described in the ADRs do not exist yet.
 
 ## Project structure
 
@@ -44,14 +44,15 @@ Each line says where the part stands today. See
   config files. Done.
 - `internal/deployment` defines the deployment states and checks the moves
   between them. The check is done. Storage uses the states and calls the check
-  when it cancels a deployment.
+  when it cancels or expires a deployment.
 - `internal/storage` will own the data directory of the server. It opens the
   SQLite database, creates the `projects` and `deployments` tables, locks the
   data directory, makes its top level directories, checks that `projects/` and
   `pruning/` share a filesystem, adds a project with its directories, adds a
-  deployment from a manifest, and cancels an unfinished deployment. The other
-  tables, uploads, activation, and recovery are still to build, and skipped
-  tests mark the recovery, concurrency, and pruning cases.
+  deployment from a manifest, cancels an unfinished deployment, and expires
+  idle deployments. The other tables, uploads, activation, and recovery are
+  still to build, and skipped tests mark the recovery, concurrency, and pruning
+  cases.
 - `internal/e2e` holds the end-to-end test of the deploy and rollback flow. One
   of its seven stages runs.
 - `docs` holds the documentation. `docs/adr` has the architecture decision
@@ -141,14 +142,15 @@ Next, storage and the state machine.
 
 - [ ] Deployment state machine. `internal/deployment` checks a move between two
   states. Storage creates a deployment in the created state and moves an
-  unfinished one to cancelled, and no other code moves a stored state yet.
-  Activation and history do not exist yet.
+  unfinished one to cancelled or, after the idle timeout, to expired, and no
+  other code moves a stored state yet. Activation and history do not exist yet.
 - [ ] Storage. `internal/storage` opens the SQLite database with the settings of
   ADR 0003, creates the `projects` and `deployments` tables, locks the data
   directory, makes its top level directories, checks that `projects/` and
   `pruning/` share a filesystem, adds a project with its directories, adds a
-  deployment from a manifest, and cancels an unfinished deployment. The other
-  tables, uploads, and the file handling do not exist yet.
+  deployment from a manifest, cancels an unfinished deployment, and expires
+  idle deployments. The other tables, uploads, and the file handling do not
+  exist yet.
 - [ ] Atomic activation, history, and crash recovery.
 - [ ] Retention and cleanup.
 
