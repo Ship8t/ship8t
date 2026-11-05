@@ -422,6 +422,52 @@ func TestCreateProjectDirectoriesReportsAMkdirFailure(t *testing.T) {
 	}
 }
 
+func TestCreateProjectDirectoriesRequiresPruning(t *testing.T) {
+	// A project is moved into pruning/ when it is pruned, so the directory must
+	// exist before a project does.
+	dataDirectory := privateTestDirectory(t)
+	createTestDirectory(t, filepath.Join(dataDirectory, "projects"))
+	createTestDirectory(t, filepath.Join(dataDirectory, "quarantine"))
+	before := treeNames(t, dataDirectory)
+
+	err := createProjectDirectories(dataDirectory, "my-site")
+	if err == nil {
+		t.Fatal("createProjectDirectories() error = nil, want an error")
+	}
+	for _, want := range []string{fmt.Sprintf("%q", filepath.Join(dataDirectory, "pruning")), "does not exist, so create the data directory layout first"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("createProjectDirectories() error = %q, want it to contain %q", err, want)
+		}
+	}
+	if got := treeNames(t, dataDirectory); strings.Join(got, ",") != strings.Join(before, ",") {
+		t.Errorf("data directory entries = %v, want %v after a refusal", got, before)
+	}
+}
+
+func TestCreateProjectDirectoriesRejectsBadPruning(t *testing.T) {
+	for _, kind := range badEntryKinds {
+		t.Run(kind.name, func(t *testing.T) {
+			dataDirectory := privateTestDirectory(t)
+			createTestDirectory(t, filepath.Join(dataDirectory, "projects"))
+			createTestDirectory(t, filepath.Join(dataDirectory, "quarantine"))
+			path := filepath.Join(dataDirectory, "pruning")
+			kind.make(t, dataDirectory, path)
+			before := treeNames(t, dataDirectory)
+
+			err := createProjectDirectories(dataDirectory, "my-site")
+			if err == nil {
+				t.Fatal("createProjectDirectories() error = nil, want an error")
+			}
+			if !strings.Contains(err.Error(), kind.wantMessage) {
+				t.Errorf("createProjectDirectories() error = %q, want it to contain %q", err, kind.wantMessage)
+			}
+			if got := treeNames(t, dataDirectory); strings.Join(got, ",") != strings.Join(before, ",") {
+				t.Errorf("data directory entries = %v, want %v after a refusal", got, before)
+			}
+		})
+	}
+}
+
 func TestCreateProjectDirectoriesDoesNotCreateThroughSymlink(t *testing.T) {
 	dataDirectory := layoutTestDirectory(t)
 	outside := t.TempDir()
