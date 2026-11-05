@@ -349,3 +349,40 @@ func TestExpireIdleDeploymentsReportsAFailedUpdateAndRollsBackTheSweep(t *testin
 		t.Errorf("expireIdleDeploymentsAt() after the failure = %v, %v, want two IDs and nil", got, err)
 	}
 }
+
+func TestExpireIdleDeploymentsCountsWholeSeconds(t *testing.T) {
+	// A fraction of a second in the timeout or in the clock is cut off and never
+	// rounded, so the edge of the timeout stays on a whole second.
+	tests := []struct {
+		name    string
+		timeout time.Duration
+	}{
+		{name: "one and a half seconds", timeout: 1500 * time.Millisecond},
+		{name: "ninety seconds and almost a second", timeout: 90*time.Second + 999*time.Millisecond},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			database := ensureTestSchema(t)
+			now := time.Unix(1_000_000, 900_000_000)
+			wholeSeconds := int64(test.timeout / time.Second)
+			insertIdleTest(t, database, 1, "my-site", "created", now.Unix()-wholeSeconds)
+			insertIdleTest(t, database, 2, "my-site", "created", now.Unix()-wholeSeconds+1)
+
+			got, err := database.expireIdleDeploymentsAt(t.Context(), now, test.timeout)
+
+			if err != nil {
+				t.Fatalf("expireIdleDeploymentsAt() error = %v, want nil", err)
+			}
+			if want := []string{idleIDTest(1)}; !slices.Equal(got, want) {
+				t.Errorf("expired IDs = %v, want %v", got, want)
+			}
+			rows := deploymentRows(t, database)
+			if rows[0].updatedAt != now.Unix() {
+				t.Errorf("updated_at = %d, want %d, the clock cut to whole seconds", rows[0].updatedAt, now.Unix())
+			}
+			if rows[1].state != "created" {
+				t.Errorf("deployment one second newer = state %q, want %q", rows[1].state, "created")
+			}
+		})
+	}
+}
