@@ -316,6 +316,35 @@ func TestCreateDeploymentCountsOnlyTheProjectItself(t *testing.T) {
 	}
 }
 
+func TestCreateDeploymentKeepsEachProjectApart(t *testing.T) {
+	database := ensureTestSchema(t)
+	execTest(t, database, "INSERT INTO projects (id) VALUES ('other-site')")
+
+	// Expect each project to hold its own count, so a limit of 1 lets both create.
+	first, err := database.CreateDeployment(t.Context(), "my-site", validManifestTest(), manifest.DefaultLimits(), 1)
+	if err != nil {
+		t.Fatalf("CreateDeployment() for my-site error = %v, want nil", err)
+	}
+	second, err := database.CreateDeployment(t.Context(), "other-site", validManifestTest(), manifest.DefaultLimits(), 1)
+	if err != nil {
+		t.Fatalf("CreateDeployment() for other-site error = %v, want nil", err)
+	}
+
+	projects := map[string]string{}
+	for _, row := range deploymentRows(t, database) {
+		projects[row.id] = row.projectID
+	}
+	if projects[first] != "my-site" || projects[second] != "other-site" {
+		t.Errorf("projects of the deployments = %v, want %s in my-site and %s in other-site", projects, first, second)
+	}
+
+	_, err = database.CreateDeployment(t.Context(), "other-site", validManifestTest(), manifest.DefaultLimits(), 1)
+	want := `project "other-site" has 1 unfinished deployments and the limit is 1, so finish or cancel one first`
+	if err == nil || err.Error() != want {
+		t.Errorf("CreateDeployment() for other-site at its limit error = %v, want %q", err, want)
+	}
+}
+
 func TestCreateDeploymentRefusesEveryCreateWhenTheLimitIsNotPositive(t *testing.T) {
 	// Expect a limit of zero or less to fail closed, so a wrong setting never
 	// lets deployments through.
