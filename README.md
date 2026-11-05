@@ -16,9 +16,10 @@ package.
 
 Deploying, rollback, the server, authentication, and all of storage except
 opening the database, creating its first two tables, locking the data
-directory, making its top level directories, and checking that two of them
-share a filesystem are not implemented. No command reads a configuration file
-yet. The commands described in the ADRs do not exist yet.
+directory, making its top level directories, checking that two of them share a
+filesystem, and adding a project with its directories are not implemented. No
+command reads a configuration file yet. The commands described in the ADRs do
+not exist yet.
 
 ## Project structure
 
@@ -43,10 +44,10 @@ Each line says where the part stands today. See
   between them. The check is done, and nothing stores a state yet.
 - `internal/storage` will own the data directory of the server. It opens the
   SQLite database, creates the `projects` and `deployments` tables, locks the
-  data directory, makes its top level directories, and checks that `projects/`
-  and `pruning/` share a filesystem. The directories of a project, the other
-  tables, activation, and recovery are still to build, and skipped tests mark
-  the recovery, concurrency, and pruning cases.
+  data directory, makes its top level directories, checks that `projects/` and
+  `pruning/` share a filesystem, and adds a project with its directories. The
+  other tables, deployments, activation, and recovery are still to build, and
+  skipped tests mark the recovery, concurrency, and pruning cases.
 - `internal/e2e` holds the end-to-end test of the deploy and rollback flow. One
   of its seven stages runs.
 - `docs` holds the documentation. `docs/adr` has the architecture decision
@@ -134,9 +135,9 @@ Next, storage and the state machine.
   history do not exist yet.
 - [ ] Storage. `internal/storage` opens the SQLite database with the settings of
   ADR 0003, creates the `projects` and `deployments` tables, locks the data
-  directory, makes its top level directories, and checks that `projects/` and
-  `pruning/` share a filesystem. The directories of a project, the other
-  tables, and the file handling do not exist yet.
+  directory, makes its top level directories, checks that `projects/` and
+  `pruning/` share a filesystem, and adds a project with its directories. The
+  other tables, deployments, and the file handling do not exist yet.
 - [ ] Atomic activation, history, and crash recovery.
 - [ ] Retention and cleanup.
 
