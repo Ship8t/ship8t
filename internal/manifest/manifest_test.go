@@ -2,12 +2,20 @@ package manifest
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
 
 // validChecksum is a well-formed lowercase SHA-256 checksum that the tests reuse.
 const validChecksum = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+// checksumForSize returns a well-formed checksum that depends only on size. Two
+// test files of one size share it and files of different sizes never do, which
+// keeps a test manifest within the rule of one size for each checksum.
+func checksumForSize(size int64) string {
+	return fmt.Sprintf("%064x", size)
+}
 
 // validFile is one valid file entry that the cases below embed in a manifest.
 const validFile = `{"path":"a.html","size":1,"sha256":"` + validChecksum + `"}`
@@ -81,8 +89,8 @@ func TestDecodeReadsAValidManifest(t *testing.T) {
 	body := `{
 		"manifest_version": 1,
 		"files": [
-			{"path": "index.html", "size": 1234, "sha256": "` + validChecksum + `"},
-			{"path": "assets/app.js", "size": 0, "sha256": "` + validChecksum + `"}
+			{"path": "index.html", "size": 1234, "sha256": "` + checksumForSize(1234) + `"},
+			{"path": "assets/app.js", "size": 0, "sha256": "` + checksumForSize(0) + `"}
 		],
 		"serve": {"spa_fallback": true}
 	}`
@@ -97,7 +105,7 @@ func TestDecodeReadsAValidManifest(t *testing.T) {
 	if len(got.Files) != 2 {
 		t.Fatalf("len(Files) = %d, want 2", len(got.Files))
 	}
-	if want := (File{Path: "index.html", Size: 1234, SHA256: validChecksum}); got.Files[0] != want {
+	if want := (File{Path: "index.html", Size: 1234, SHA256: checksumForSize(1234)}); got.Files[0] != want {
 		t.Errorf("Files[0] = %+v, want %+v", got.Files[0], want)
 	}
 	if !got.Serve.SPAFallback {

@@ -18,8 +18,9 @@ func manifestWithSizes(sizes ...int64) *Manifest {
 }
 
 // fileWithSize returns a valid file entry with its own path and the given size.
+// Its checksum follows the size.
 func fileWithSize(number int, size int64) string {
-	return fmt.Sprintf(`{"path":"file%d.html","size":%d,"sha256":%q}`, number, size, validChecksum)
+	return fmt.Sprintf(`{"path":"file%d.html","size":%d,"sha256":%q}`, number, size, checksumForSize(size))
 }
 
 func TestDefaultLimitsMatchADR0004(t *testing.T) {
