@@ -7,14 +7,17 @@ import (
 	"io"
 	"math"
 	"os"
-	"strings"
 
 	"github.com/ship8t/ship8t/internal/manifest"
 )
 
-// placeholderChecksum stands in for a checksum while Describe checks the paths
-// and the sizes, before it reads any content.
-var placeholderChecksum = strings.Repeat("0", 64)
+// placeholderChecksum stands in for the checksum of the file at index while
+// Describe checks the paths and the sizes, before it reads any content. Each
+// index gets its own value, because the manifest rules allow one size for each
+// checksum and the sizes are not the real ones yet.
+func placeholderChecksum(index int) string {
+	return fmt.Sprintf("%064x", index)
+}
 
 // Describe returns a manifest entry with the size and the SHA-256 checksum for
 // each of files, in the same order. The paths are slash-separated and relative
@@ -29,7 +32,7 @@ func Describe(directory string, files []string, limits manifest.Limits) ([]manif
 	defer root.Close()
 
 	entries := make([]manifest.File, 0, len(files))
-	for _, file := range files {
+	for index, file := range files {
 		// Use Lstat, so a symlink that replaced a file after the scan is refused
 		// and never followed.
 		info, err := root.Lstat(file)
@@ -39,7 +42,7 @@ func Describe(directory string, files []string, limits manifest.Limits) ([]manif
 		if !info.Mode().IsRegular() {
 			return nil, fmt.Errorf("scan %q: not a regular file, remove it from the deploy directory", file)
 		}
-		entries = append(entries, manifest.File{Path: file, Size: info.Size(), SHA256: placeholderChecksum})
+		entries = append(entries, manifest.File{Path: file, Size: info.Size(), SHA256: placeholderChecksum(index)})
 	}
 
 	// Check the paths and the sizes from the stat before reading, so a file over

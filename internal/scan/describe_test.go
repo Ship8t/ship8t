@@ -276,3 +276,27 @@ func TestHashFileHandlesTheLargestLimit(t *testing.T) {
 		t.Errorf("hashFile() = %d, %q, want 5, %q", size, checksum, helloChecksum)
 	}
 }
+
+func TestPlaceholderChecksumIsDistinctAndWellFormed(t *testing.T) {
+	// The values are written out, so a change of the format is a decision here.
+	tests := []struct {
+		index int
+		want  string
+	}{
+		{index: 0, want: strings.Repeat("0", 64)},
+		{index: 1, want: strings.Repeat("0", 63) + "1"},
+		{index: 255, want: strings.Repeat("0", 62) + "ff"},
+		{index: 4096, want: strings.Repeat("0", 60) + "1000"},
+	}
+	seen := map[string]int{}
+	for _, test := range tests {
+		got := placeholderChecksum(test.index)
+		if got != test.want {
+			t.Errorf("placeholderChecksum(%d) = %q, want %q", test.index, got, test.want)
+		}
+		if previous, found := seen[got]; found {
+			t.Errorf("placeholderChecksum(%d) = placeholderChecksum(%d) = %q, want distinct values", test.index, previous, got)
+		}
+		seen[got] = test.index
+	}
+}
