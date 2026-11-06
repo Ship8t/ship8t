@@ -27,8 +27,20 @@ Only the following exists in the code today.
     because they would clash on a case-insensitive filesystem.
   - It enforces limits on the file count and the file sizes. The defaults are
     10,000 files, 50 MiB per file, and 500 MiB in total.
+  - It rejects a manifest that lists one checksum with two different sizes,
+    because a checksum names one content and so one size. The error names the
+    position of each of the two files and their sizes. Two files with one
+    checksum and one size are accepted, and so are two empty files. The check
+    runs after the path checks, so a manifest with both problems reports the
+    path first.
   - `Validate` applies the same rules and limits to a manifest that code builds
     in memory.
+  - `Blobs` returns each distinct checksum of a manifest once with its size, as
+    `Blob` values sorted by checksum, so the answer does not depend on the order
+    of the files. This is the list that step 1 of the ADR 0004 upload flow calls
+    `upload.missing`. Files with one checksum share one entry, and an empty file
+    has an entry. It expects a manifest that passed validation and has no error
+    return. Nothing calls it yet, because the first caller is the upload code.
   - `internal/scan` and `internal/storage` use it. No command uses it yet.
 - `internal/scan` lists the files of a deploy directory and describes them as
   manifest entries. No command uses it yet.
@@ -50,7 +62,9 @@ Only the following exists in the code today.
     `ignore` rule that excludes it. An option turns the check off.
   - `Describe` returns the size and the SHA-256 checksum of each file. It checks
     the paths and the limits with `manifest.Validate` before it reads any
-    content.
+    content. It gives each file its own placeholder checksum for that first
+    check, because the manifest rules allow one size for each checksum and the
+    sizes are not final yet.
   - The patterns and the options come from the caller. No command passes the
     settings of `ship8t.json` to the scanner yet. The end-to-end test does.
 - `internal/config` reads and validates the config files. No command uses it
