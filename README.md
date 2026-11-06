@@ -33,7 +33,8 @@ Each line says where the part stands today. See
   only, and `--help` and `-h` mean `help`.
 - `internal/version` reports the build version for both binaries. Done.
 - `internal/manifest` validates and decodes deployment manifests for the client
-  and the server. Done. The scanner and `internal/storage` use it.
+  and the server, and lists the distinct blobs of a manifest. Done. The scanner
+  and `internal/storage` use it, and nothing calls the blob list yet.
 - `internal/scan` lists the files of a deploy directory, applies the ignore
   rules, detects secrets, and describes the files for a manifest. Done. No
   command calls it yet.

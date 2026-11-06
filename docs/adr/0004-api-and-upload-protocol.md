@@ -291,3 +291,26 @@ Let the client upload with a small bounded number of concurrent requests
   array and stop at the limit, so a small body cannot expand into a large
   allocation. Read at most 8 MiB of the manifest body. Cap the text of a decode
   error that quotes untrusted input, so an error never grows with the body.
+- 2026-11-06. Clarified the manifest rules and the upload list while building
+  `internal/manifest`, without changing a decision. Reject a manifest that lists
+  one checksum with two different sizes, because a checksum names one content
+  and so one size, and the server never trusts the client. The list of manifest
+  rules above does not name this rule, so this entry records it as a reading.
+  `Validate` and `Decode` apply it after the path checks and name the position
+  of each of the two files and their sizes, so a manifest with both problems
+  reports the path first. Accept two files with one checksum and one size, and
+  accept two empty files. List the distinct blobs of a manifest with `Blobs`,
+  which gives the entries with a `sha256` and a `size` that step 1 of the upload
+  flow calls `upload.missing`. In v1 the list holds every distinct blob, so
+  files with one checksum share one entry, an empty file has an entry, and the
+  list is sorted by checksum, so the answer does not depend on the order of the
+  files. `Blobs` expects a manifest that passed validation and has no error
+  return. The first caller arrives with the upload code, and the list of blobs
+  still missing after some uploads needs the table for files, which does not
+  exist yet. `scan.Describe` checks the paths and the limits before it reads any
+  content, with a placeholder checksum for each file. Give each file its own
+  placeholder, because one shared placeholder with the real sizes would break
+  the new rule. A development database that holds a manifest stored before this
+  entry can list one checksum with two sizes, and `Blobs` then uses the first
+  size. The operator deletes such a database, as ADR 0003 says for a development
+  database from an earlier step.
