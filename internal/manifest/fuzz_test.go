@@ -16,10 +16,10 @@ import (
 // fuzzLimits keeps the limits small, so short inputs reach the limit checks.
 var fuzzLimits = Limits{MaxFiles: 4, MaxFileSize: 1000, MaxTotalSize: 2000}
 
-// fuzzFile returns the JSON of one file entry with the checksum of an empty
-// file.
+// fuzzFile returns the JSON of one file entry with a checksum that follows the
+// size.
 func fuzzFile(path string, size int) string {
-	return fmt.Sprintf(`{"path":%s,"size":%d,"sha256":%q}`, path, size, validChecksum)
+	return fmt.Sprintf(`{"path":%s,"size":%d,"sha256":%q}`, path, size, checksumForSize(int64(size)))
 }
 
 // fuzzManifest returns the JSON of a manifest of version 1 with the file
