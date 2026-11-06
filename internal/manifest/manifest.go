@@ -127,8 +127,8 @@ func (manifest *Manifest) Validate(limits Limits) error {
 	return manifest.checkLimits(limits)
 }
 
-// validate checks the version, the file count, every file, and how the file
-// paths relate to each other.
+// validate checks the version, the file count, every file, how the file paths
+// relate to each other, and that one checksum has one size.
 func (manifest *Manifest) validate() error {
 	if manifest.ManifestVersion != supportedVersion {
 		return fmt.Errorf("%w: got %d, want %d", ErrUnsupportedVersion, manifest.ManifestVersion, supportedVersion)
@@ -142,6 +142,9 @@ func (manifest *Manifest) validate() error {
 		}
 	}
 	if err := checkPathCollisions(manifest.Files); err != nil {
+		return fmt.Errorf("invalid manifest: %w", err)
+	}
+	if err := checkChecksumSizes(manifest.Files); err != nil {
 		return fmt.Errorf("invalid manifest: %w", err)
 	}
 	return nil

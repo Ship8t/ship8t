@@ -22,6 +22,12 @@ func fuzzFile(path string, size int) string {
 	return fmt.Sprintf(`{"path":%s,"size":%d,"sha256":%q}`, path, size, checksumForSize(int64(size)))
 }
 
+// sizedFile returns the JSON of one file entry with the given checksum, which
+// lets a seed give one checksum two sizes.
+func sizedFile(path string, size int, checksum string) string {
+	return fmt.Sprintf(`{"path":%s,"size":%d,"sha256":%q}`, path, size, checksum)
+}
+
 // fuzzManifest returns the JSON of a manifest of version 1 with the file
 // entries.
 func fuzzManifest(files ...string) string {
@@ -49,6 +55,8 @@ func fuzzSeeds() []string {
 		fuzzManifest(fuzzFile(`"a.html"`, 1), fuzzFile(`"a.html"`, 1)),
 		fuzzManifest(fuzzFile(`"A.html"`, 1), fuzzFile(`"a.html"`, 1)),
 		fuzzManifest(fuzzFile(`"docs"`, 1), fuzzFile(`"docs/a.html"`, 1)),
+		// One checksum with two sizes.
+		fuzzManifest(sizedFile(`"a"`, 1, validChecksum), sizedFile(`"b"`, 2, validChecksum)),
 		// Field rules.
 		`{"manifest_version":1,"files":[{"path":"a","size":1,"sha256":"` + validChecksum + `","mode":420}]}`,
 		`{"manifest_version":1,"files":[{"Path":"a","size":1,"sha256":"` + validChecksum + `"}]}`,
@@ -85,11 +93,16 @@ func checkAcceptedManifest(t *testing.T, accepted *Manifest) {
 
 	var total int64
 	seen := make(map[string]bool)
+	sizeOf := make(map[string]int64)
 	for index, file := range accepted.Files {
 		if seen[file.Path] {
 			t.Errorf("files[%d] repeats the path %q", index, file.Path)
 		}
 		seen[file.Path] = true
+		if size, found := sizeOf[file.SHA256]; found && size != file.Size {
+			t.Errorf("files[%d] has size %d but an earlier file has the same checksum and size %d", index, file.Size, size)
+		}
+		sizeOf[file.SHA256] = file.Size
 
 		if file.Size < 0 || file.Size > fuzzLimits.MaxFileSize {
 			t.Errorf("files[%d] has size %d outside 0 to %d", index, file.Size, fuzzLimits.MaxFileSize)
